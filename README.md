@@ -56,7 +56,6 @@ Focus areas:
 * [x] Signals
 * [x] IPC mechanisms
 * [x] Event-driven programming
-* [ ] Advanced memory management
 
 ## Modern C++ Concurrency
 
