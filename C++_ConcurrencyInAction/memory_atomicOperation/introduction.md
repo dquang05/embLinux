@@ -49,13 +49,13 @@ To understand this chapter thoroughly, focus on the following topics:
 
 How memory is observed by different threads and how instruction execution order is defined.
 
-[Detailed Notes](memModelBasic.md)
+[Detailed Notes](Notes/memModelBasic.md)
 
 ### Atomic Types
 
 How to declare and use `std::atomic<T>`.
 
-[Detailed Notes](atomicOperations.md)
+[Detailed Notes](Notes/atomicOperations.md)
 
 
 ### Synchronization
@@ -67,4 +67,4 @@ How atomic operations synchronize threads through memory ordering mechanisms:
 - `memory_order_release`
 - `memory_order_seq_cst`
 
-[Detailed Notes](threadObservingOthers.md)
+[Detailed Notes](Notes/threadObservingOthers.md)
