@@ -61,10 +61,10 @@ Focus areas:
 
 * [x] Thread lifecycle and management
 * [x] Mutexes and shared data protection
-* [ ] Condition variables
-* [ ] Futures and async tasks
-* [ ] Atomics
-* [ ] Memory model
-* [ ] Lock-free programming
-
+* [x] Atomics
+* [x] Memory model
+* [x] Lock-free programming
+* [x] Lock-based programming
+* [x] Futures and async programming
+* [ ] Designing concurrent code
 
