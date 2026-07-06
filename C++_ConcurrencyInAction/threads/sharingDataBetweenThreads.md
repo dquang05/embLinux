@@ -2,6 +2,7 @@
 
 This chapter focuses on one of the most important problems in concurrent programming:
 
+Just for reference C++11, for later versions such as C++17 or C++20, there are more optimizations and features available, but the core concepts remain relevant.
 > How can multiple threads safely share and modify data without introducing concurrency bugs?
 
 ---

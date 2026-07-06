@@ -1,5 +1,7 @@
 # C++ Concurrency: Thread Lifecycle and Management
 
+Just for reference C++11, for later versions such as C++17 or C++20, there are more optimizations and features available, but the core concepts remain relevant.
+
 ## 1. Thread Lifecycle and Launching Threads
 
 Every C++ program always starts with at least one thread: the thread executing the `main()` function. When a new thread is created using `std::thread`, it runs concurrently with the main thread until its entry function returns.
