@@ -241,3 +241,54 @@ Apply Separation of Concerns. The GUI thread should only be responsible for capt
 
 
 
+# 6. Designing Concurrent Code in Practice
+
+Applying concurrent design principles to real-world tasks requires careful consideration of data access patterns, exception safety, and synchronization overhead. To demonstrate these concepts, we analyze the parallelization of three standard C++ algorithms, each presenting a unique architectural challenge.
+
+All code examples for this section are located in the [`practice/`](practice/) directory.
+
+## Parallel `std::for_each`: Independent Execution
+
+`std::for_each` applies a function to every element in a range. The parallel version differs fundamentally from the sequential version in that the order of execution is completely arbitrary. 
+
+Since each element is processed independently, this algorithm is perfectly suited for **Recursive Data Division**. By recursively splitting the array in half and utilizing `std::async`, we allow the C++ Standard Library to automatically manage thread scaling (avoiding oversubscription) while inherently guaranteeing exception safety.
+
+**View the implementation:** [`practice/parallelForEachAsync.hpp`](practice/parallelForEachAsync.hpp)
+
+## Parallel `std::find`: Early Termination
+
+Unlike `for_each`, algorithms like `std::find`, `std::any_of`, or `std::equal` possess a crucial property: **Early Termination**. If the desired element is found at the beginning of the sequence, the algorithm should stop immediately.
+
+**The Design Challenge:**
+In a parallel context, if Thread A finds the target, Threads B, C, and D must be interrupted. If we fail to interrupt the other threads, the parallel version might actually perform *slower* than the serial version, as the serial version returns the moment it finds a match.
+
+**The Solution:**
+We introduce a shared `std::atomic<bool> done` flag. Every thread frequently checks this flag during its execution loop. If a thread finds a match (or throws an exception), it sets `done = true`, signaling all other threads to abort their searches immediately.
+
+**View the implementation:** [`practice/parallelFindAsync.hpp`](practice/parallelFindAsync.hpp)
+
+## Parallel `std::partial_sum`: Handling Data Dependencies
+
+`std::partial_sum` calculates a running total (e.g., `1, 2, 3` becomes `1, 3, 6`). This is notoriously difficult to parallelize because the result of element $N$ strictly depends on the result of element $N-1$. 
+
+Depending on the hardware architecture, there are two distinct ways to solve this:
+
+### Approach 1: Block-based Forward Propagation (For standard multi-core CPUs)
+The array is divided into chunks. Each thread calculates the partial sum of its own chunk. Then, the final element of Chunk 1 is added to all elements in Chunk 2, and so forth. This works well when there are far more data elements than CPU cores.
+
+### Approach 2: Incremental Pairwise Algorithm (For massively parallel/SIMD systems)
+Elements are updated by adding values from an increasing stride (1, 2, 4, 8...). This requires threads to execute in strict **lockstep** to prevent race conditions (i.e., a thread running too fast and reading stale data before another thread has updated it).
+
+To enforce lockstep execution, we implement a **Barrier**. A barrier forces threads to wait until exactly $N$ threads have arrived at the checkpoint. Once the "seats" are filled, the barrier opens, allowing all threads to proceed to the next iteration simultaneously.
+
+**View the implementation:** [`practice/parallelPartialSum.hpp`](practice/parallelPartialSum.hpp)
+
+# Chapter Summary
+
+Designing concurrent code goes far beyond basic thread-safe data structures. It demands a holistic view of the system:
+1. **Work Division:** Should we divide data upfront, recursively, or by task type (pipelines)?
+2. **Hardware Realities:** Preventing False Sharing and optimizing Data Proximity to keep CPU caches efficient.
+3. **Robustness:** Ensuring strict Exception Safety and preventing Thread Leaks.
+4. **Scalability:** Minimizing lock contention to obey Amdahl's Law and utilizing lock-free synchronization (like Barriers) when necessary.
+
+Repeatedly spawning and joining threads for every algorithm incurs significant OS overhead. To build high-performance, large-scale applications, we need a mechanism to reuse threads efficiently. This leads us directly to the concept of **Thread Pools**.
