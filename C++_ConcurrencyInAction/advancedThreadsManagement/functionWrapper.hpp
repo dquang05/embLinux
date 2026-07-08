@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
 #include <utility>
-
+// Depricated in C++17
 class function_wrapper {
     struct impl_base {
         virtual void call() = 0;
