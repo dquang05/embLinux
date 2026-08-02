@@ -1,0 +1,2 @@
+add_library(core_coroutines INTERFACE)
+target_include_directories(core_coroutines INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
