@@ -1,2 +1,3 @@
-add_library(core_concurrency INTERFACE)
-target_include_directories(core_concurrency INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(core_concurrency STATIC thread_pool.cpp)
+target_include_directories(core_concurrency PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(core_concurrency PRIVATE -Wall -Wextra -Werror)
