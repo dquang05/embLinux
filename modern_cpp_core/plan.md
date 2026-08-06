@@ -11,13 +11,13 @@ This document serves as the architectural roadmap for the `modern_cpp_core` libr
 **Legacy Reference:** `threads/`, `synchronizingConcurrency/`, `advancedThreadsManagement/`.
 
 **Planned Features:**
-- [ ] **`JThreadPool` (Modern Thread Pool):** 
+- [x] **`JThreadPool` (Modern Thread Pool):** 
   - *Concept:* A pool of threads that reuses OS threads to reduce creation overhead.
   - *Upgrade:* Replaces the legacy `workStealingPool.hpp`. Utilizes `std::jthread` (auto-joining) and `std::stop_token` for safe cancellation without manual boolean flags.
-- [ ] **`Barrier / Latch Synchronization`:**
+- [x] **`Barrier / Latch Synchronization`:**
   - *Concept:* Synchronization primitives that allow multiple threads to wait at a synchronization point (Barrier) or count down events (Latch).
   - *Upgrade:* Directly use C++20 `std::barrier` and `std::latch` instead of writing custom wrappers over mutexes and condition variables.
-- [ ] **`Semaphore Wrapper`:** 
+- [x] **`Semaphore Wrapper`:** 
   - Wraps C++20 `std::counting_semaphore` to control access to limited resources (e.g., database connection limits).
 
 ## 2. Module `coroutines` (Asynchronous Programming)
