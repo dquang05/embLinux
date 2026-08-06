@@ -27,10 +27,10 @@ This document serves as the architectural roadmap for the `modern_cpp_core` libr
 **Legacy Reference:** `taskBased.cpp`, `waitingFuture.md`.
 
 **Planned Features:**
-- [ ] **`Task<T>`:**
+- [x] **`Task<T>`:**
   - *Concept:* A return type for a Coroutine representing future work. Lazy evaluation - execution only begins when `co_await` is called.
   - *Upgrade:* Replaces `std::future` (which typically blocks the thread via `.wait()`).
-- [ ] **`Generator<T>`:**
+- [x] **`Generator<T>`:**
   - *Concept:* Generates an infinite or massive stream of data (e.g., reading log files line by line, sampling sensors) using `co_yield` without allocating the entire array in memory.
 
 ## 3. Module `data_structures` (Thread-Safe Data Structures)
