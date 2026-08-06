@@ -30,6 +30,28 @@ void test_generator() {
 	std::cout << "Generator test passed.\n";
 }
 
+// Test Generator without copying
+struct NoCopy {
+	int val;
+	NoCopy(int v) : val(v) {}
+	NoCopy(const NoCopy&) = delete;
+	NoCopy(NoCopy&&) = default;
+	NoCopy& operator=(const NoCopy&) = delete;
+	NoCopy& operator=(NoCopy&&) = default;
+};
+
+Generator<NoCopy> generate_no_copy() {
+	co_yield NoCopy{42};
+}
+
+void test_generator_no_copy() {
+	std::cout << "Testing core::coroutines::Generator without copy\n";
+	for (const auto& item : generate_no_copy()) {
+		assert(item.val == 42);
+	}
+	std::cout << "Generator no-copy test passed.\n";
+}
+
 // 2. Test Task (Lazy evaluation)
 bool task_started = false;
 
@@ -41,27 +63,6 @@ Task<int> compute_value() {
 Task<int> async_operation() {
 	int val = co_await compute_value();
 	co_return val * 2;
-}
-
-void test_task() {
-	std::cout << "Testing core::coroutines::Task\n";
-	
-	task_started = false;
-	auto task = async_operation();
-	
-	// Because it's lazy, execution shouldn't have started yet.
-	assert(!task_started);
-	
-	// Await the task - we need a runner or another task to wait for it.
-	// Since we are in synchronous code (main), we can write a sync_wait helper.
-	
-	// Simple sync_wait using a coroutine that sets a promise/latch?
-	// Actually, we can just manually resume the task if it's purely CPU-bound and synchronous.
-	// But `async_operation()` returns a Task<int>. To run it, we can create a detached task.
-	
-	// Let's implement a simple blocking sync_wait inline for the test.
-	// Wait, our Task doesn't have a `.resume()` exposed directly.
-	// Let's define a runner coroutine.
 }
 
 // Simple task runner that stores result
@@ -89,8 +90,6 @@ void test_task_full() {
 	task_started = false;
 	auto runner = run_async_operation();
 	
-	// Since SyncWaitTask's initial_suspend is suspend_never, it starts immediately.
-	// This triggers async_operation(), which triggers compute_value().
 	assert(task_started);
 	assert(runner.get() == 84); // 42 * 2
 	
@@ -99,9 +98,7 @@ void test_task_full() {
 
 int main() {
 	test_generator();
-	
-	// Notice we only call test_task_full(), because test_task() was just sketching out the lazy evaluation check.
-	// Let's combine them properly.
+	test_generator_no_copy();
 	
 	task_started = false;
 	auto lazy_task = compute_value();

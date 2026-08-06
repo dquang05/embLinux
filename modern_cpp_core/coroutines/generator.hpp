@@ -5,6 +5,8 @@
 #include <exception>
 #include <iterator>
 #include <utility>
+#include <cstddef>
+#include <optional>
 
 namespace core::coroutines {
 
@@ -22,7 +24,7 @@ public:
 	using handle_type = std::coroutine_handle<promise_type>;
 
 	struct promise_type {
-		T m_current_value;
+		std::optional<T> m_current_value;
 		std::exception_ptr m_exception;
 
 		Generator get_return_object() {
@@ -32,8 +34,9 @@ public:
 		std::suspend_always initial_suspend() noexcept { return {}; }
 		std::suspend_always final_suspend() noexcept { return {}; }
 		
-		std::suspend_always yield_value(T value) {
-			m_current_value = std::move(value);
+		template <typename U>
+		std::suspend_always yield_value(U&& value) {
+			m_current_value.emplace(std::forward<U>(value));
 			return {};
 		}
 		
@@ -68,10 +71,8 @@ public:
 			return *this;
 		}
 
-		iterator operator++(int) {
-			iterator tmp = *this;
+		void operator++(int) {
 			++(*this);
-			return tmp;
 		}
 
 		bool operator==(const iterator& other) const {
@@ -79,11 +80,11 @@ public:
 		}
 
 		reference operator*() const {
-			return m_coroutine.promise().m_current_value;
+			return *m_coroutine.promise().m_current_value;
 		}
 
 		pointer operator->() const {
-			return &(m_coroutine.promise().m_current_value);
+			return &(*m_coroutine.promise().m_current_value);
 		}
 
 	private:
@@ -135,5 +136,9 @@ private:
 };
 
 } // namespace core::coroutines
+
+// RISK REVIEW:
+// - Single-pass iteration: The generator mutates coroutine state upon traversal. Calling `begin()` twice will not restart the generation but continue or fail if done.
+// - Dangling references: If `T` is a reference or a view type (e.g., `std::string_view`), callers must ensure the underlying lifetime outlives the lazy traversal of the Generator.
 
 #endif // MODERN_CPP_CORE_COROUTINES_GENERATOR_HPP
