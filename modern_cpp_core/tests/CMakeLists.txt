@@ -34,6 +34,11 @@ add_executable(test_jthread_pool test_jthread_pool.cpp)
 target_link_libraries(test_jthread_pool PRIVATE core_concurrency)
 target_compile_options(test_jthread_pool PRIVATE -Wall -Wextra -Werror)
 
+add_executable(test_remaining_module1 test_remaining_module1.cpp)
+target_link_libraries(test_remaining_module1 PRIVATE core_concurrency)
+target_compile_options(test_remaining_module1 PRIVATE -Wall -Wextra -Werror)
+
 # Add CTest support if not already there
 enable_testing()
 add_test(NAME JThreadPoolTest COMMAND test_jthread_pool)
+add_test(NAME RemainingModule1Test COMMAND test_remaining_module1)

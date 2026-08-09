@@ -19,12 +19,12 @@ This document serves as the architectural roadmap for the `modern_cpp_core` libr
   - *Upgrade:* Directly use C++20 `std::barrier` and `std::latch` instead of writing custom wrappers over mutexes and condition variables. This acts as the modern, built-in replacement for one-off broadcast events previously handled by `std::condition_variable::notify_all()`.
 - [x] **`Semaphore Wrapper`:** 
   - Wraps C++20 `std::counting_semaphore` to control access to limited resources (e.g., database connection limits).
-- [ ] **`Low-Level Atomic Wait/Notify`:**
+- [x] **`Low-Level Atomic Wait/Notify`:**
   - *Concept:* Utilize C++20 `std::atomic::wait`, `notify_one`, and `notify_all` as a lightweight lock-free alternative to `std::condition_variable` (based on futex).
   - *Design Note:* Must explicitly handle Spurious Wakeups by wrapping the `.wait()` call in a loop with a condition check (predicate), similarly to how it was done with `std::condition_variable`.
-- [ ] **`Spinlock`:**
+- [x] **`Spinlock`:**
   - *Concept:* Ultra-fast lock using C++20 `std::atomic_flag::wait()` and `test()`. Eliminates system call overhead for extremely short critical sections (crucial for Embedded).
-- [ ] **`Thread Affinity & Real-time Priority`:**
+- [x] **`Thread Affinity & Real-time Priority`:**
   - *Concept:* Expose `.native_handle()` in thread utilities to pin threads to specific CPU cores (`pthread_setaffinity_np`) and set POSIX real-time scheduling policies (`SCHED_FIFO`, `SCHED_RR`) to avoid cache ping-pong and ensure determinism.
 
 ## 2. Module `coroutines` (Asynchronous Programming)
