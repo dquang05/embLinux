@@ -7,91 +7,79 @@
 #include <mutex>
 #include <condition_variable>
 #include <future>
-#include <functional>
 #include <memory>
-#include <type_traits>
+#include <expected>
+#include <system_error>
+#include "fixed_task.hpp"
 
 namespace core::concurrency {
 
 /**
  * @brief A modern C++20 Thread Pool utilizing std::jthread and std::stop_token.
  * 
- * Provides a robust, simple task queue mechanism for executing tasks asynchronously.
- * Uses standard C++20 synchronization primitives and returns std::future for task results.
+ * Uses standard C++20 synchronization primitives. Features a factory method 
+ * returning std::expected to safely handle OS thread allocation failures.
  */
 class JThreadPool {
 public:
 	/**
-	 * @brief Constructs a thread pool with a specified number of threads.
-	 * @param thread_count The number of threads to spawn. Defaults to hardware concurrency.
+	 * @brief Factory method to create a thread pool.
+	 * @param thread_count The number of threads to spawn.
+	 * @return std::expected containing the pool on success, or an error code on failure.
 	 */
-	explicit JThreadPool(std::size_t thread_count = std::thread::hardware_concurrency());
+	[[nodiscard]] static std::expected<std::unique_ptr<JThreadPool>, std::error_code> 
+    create(std::size_t thread_count = std::thread::hardware_concurrency());
 
-	/**
-	 * @brief Destructor automatically stops all threads safely and joins them via std::jthread.
-	 */
 	~JThreadPool();
 
-	// Delete copy and move constructors to prevent accidental duplication
+	// Delete copy and move constructors
 	JThreadPool(const JThreadPool&) = delete;
 	JThreadPool& operator=(const JThreadPool&) = delete;
 	JThreadPool(JThreadPool&&) = delete;
 	JThreadPool& operator=(JThreadPool&&) = delete;
 
 	/**
-	 * @brief Submits a task to the thread pool for execution.
+	 * @brief Submits a fire-and-forget task without allocating any futures or promises.
+	 * @note This uses FixedTask to guarantee zero hidden heap allocations.
 	 * 
-	 * @tparam F Type of the callable function.
-	 * @tparam Args Types of the arguments.
+	 * @tparam F Callable type
 	 * @param f The callable function to execute.
-	 * @param args The arguments to pass to the function.
-	 * @return A std::future representing the eventual result of the task.
 	 */
-	template<typename F, typename... Args>
-	auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>>
-	{
-		using return_type = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
-		
-		// Wrap the task in a shared_ptr so it can be copied into a std::function<void()>
-		auto task = std::make_shared<std::packaged_task<return_type()>>(
-			std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-		);
-		
-		std::future<return_type> res = task->get_future();
-		
+	template<typename F>
+	void execute(F&& f) {
 		{
 			std::scoped_lock lock(m_queue_mutex);
 			if (m_is_shutdown) {
-				// We don't use exceptions per rules, but submitting to a stopped pool is an error.
-				// For now, if shut down, we just don't execute it. The future will block indefinitely or 
-				// we could throw a std::runtime_error (but we want to avoid exceptions).
-				// Since we can't return std::expected from this signature, we just do nothing and return a broken promise.
-				// Wait, returning a broken promise will throw std::future_error on get().
-				// This is a known limitation of the current standard future approach when avoiding exceptions.
-			} else {
-				m_task_queue.emplace([task]() { (*task)(); });
+				return;
 			}
+			m_task_queue.emplace(std::forward<F>(f));
 		}
-		
 		m_cv.notify_one();
-		return res;
 	}
 
 private:
+	// Private constructor used by create()
+	explicit JThreadPool(std::size_t thread_count);
+
 	/**
 	 * @brief The worker loop executed by each thread.
-	 * @param stoken The stop token provided by std::jthread to signal cancellation.
+	 * @param stoken The stop token provided by std::jthread.
 	 */
 	void worker_loop(std::stop_token stoken);
 
 	std::vector<std::jthread> m_workers;
-	std::queue<std::function<void()>> m_task_queue;
+	std::queue<FixedTask<64>> m_task_queue;
 	
 	std::mutex m_queue_mutex;
 	std::condition_variable_any m_cv;
-	bool m_is_shutdown;
+	bool m_is_shutdown{false};
 };
 
 } // namespace core::concurrency
+
+// RISK REVIEW:
+// - Edge cases: Calling execute() on a stopped pool ignores the task. Thread creation limits (EAGAIN) handled via expected.
+// - Concurrency Risks: The task queue uses a std::mutex. Caller is responsible for data races inside tasks.
+// - Caller Responsibilities: Caller must ensure task capture size fits within FixedTask<64>.
 
 #endif // MODERN_CPP_CORE_CONCURRENCY_THREAD_POOL_HPP

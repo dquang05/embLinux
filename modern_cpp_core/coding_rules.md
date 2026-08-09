@@ -53,4 +53,5 @@ My library for **Embedded Systems** and **High-Performance Backend** environment
 ## 8. Testing & Deliverables
 - **Unit Test Coverage**: Every core module or utility function must be accompanied by a dedicated test runner (`test_module.cpp`).
 - **Edge Case Verification**: Tests must explicitly verify all edge cases (null inputs, empty inputs, max boundaries) outlined in the Risk Review.
+- **Concurrency & Sanitizers**: All multithreaded code must be compiled and tested with **ThreadSanitizer (TSan)** (`-fsanitize=thread`) to automatically detect Data Races, Deadlocks, and Livelocks. Tests must intentionally provoke high contention.
 - **Test Output**: Tests must print `PASS`/`FAIL` for each case and return a non-zero exit code if any test fails, enabling CI/CD automation.

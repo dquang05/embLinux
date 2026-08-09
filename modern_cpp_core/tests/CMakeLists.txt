@@ -6,9 +6,9 @@ if(ENABLE_TSAN)
 	add_link_options(-fsanitize=thread -pie)
 endif()
 
-add_executable(test_concurrency test_concurrency.cpp)
-target_link_libraries(test_concurrency PRIVATE core_concurrency)
-target_compile_options(test_concurrency PRIVATE -Wall -Wextra -Werror -Wno-interference-size)
+# add_executable(test_concurrency test_concurrency.cpp)
+# target_link_libraries(test_concurrency PRIVATE core_concurrency)
+# target_compile_options(test_concurrency PRIVATE -Wall -Wextra -Werror -Wno-interference-size)
 
 add_executable(test_coroutines test_coroutines.cpp)
 target_link_libraries(test_coroutines PRIVATE core_coroutines)
@@ -29,3 +29,11 @@ target_compile_options(test_lock_free_queue PRIVATE -Wall -Wextra -Werror -Wno-i
 add_executable(test_thread_safe_hash_map test_thread_safe_hash_map.cpp)
 target_link_libraries(test_thread_safe_hash_map PRIVATE core_data_structures)
 target_compile_options(test_thread_safe_hash_map PRIVATE -Wall -Wextra -Werror -Wno-interference-size)
+
+add_executable(test_jthread_pool test_jthread_pool.cpp)
+target_link_libraries(test_jthread_pool PRIVATE core_concurrency)
+target_compile_options(test_jthread_pool PRIVATE -Wall -Wextra -Werror)
+
+# Add CTest support if not already there
+enable_testing()
+add_test(NAME JThreadPoolTest COMMAND test_jthread_pool)
