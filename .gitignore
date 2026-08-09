@@ -13,3 +13,6 @@ build/
 # IDE specific files
 .vscode/
 .DS_Store
+
+# Text file
+Concurrency.txt
