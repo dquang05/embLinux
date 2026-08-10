@@ -26,7 +26,7 @@ void test_try_pop() {
 	CORE_ASSERT(val1 && *val1 == 10);
 	CORE_ASSERT(val2 && *val2 == 20);
 	CORE_ASSERT(!val3);
-	std::cout << "test_try_pop passed.\n";
+	CORE_PASS("test_try_pop");
 }
 
 /**
@@ -69,7 +69,7 @@ void test_wait_and_pop() {
 	} // jthreads auto-join here
 
 	CORE_ASSERT(sum_popped.load() == sum_expected.load());
-	std::cout << "test_wait_and_pop passed.\n";
+	CORE_PASS("test_wait_and_pop");
 }
 
 /**
@@ -102,14 +102,13 @@ void test_deadlock_edge_case() {
 	consumer.join();
 	CORE_ASSERT(consumer_finished.load(std::memory_order_relaxed));
 
-	std::cout << "test_deadlock_edge_case passed.\n";
+	CORE_PASS("test_deadlock_edge_case");
 }
 
 int main() {
 	test_try_pop();
 	test_wait_and_pop();
 	test_deadlock_edge_case();
-	std::cout << "All ThreadSafeQueue tests passed.\n";
 	return 0;
 }
 

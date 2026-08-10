@@ -40,7 +40,7 @@ void test_basic_rcu() {
 		CORE_ASSERT(data->payload == 200);
 	}
 	
-	std::cout << "test_basic_rcu passed.\n";
+	CORE_PASS("test_basic_rcu");
 }
 
 /**
@@ -91,7 +91,7 @@ void test_concurrent_read_heavy() {
 
 	threads.clear(); // Waits for all threads to join
 	
-	std::cout << "test_concurrent_read_heavy passed.\n";
+	CORE_PASS("test_concurrent_read_heavy");
 }
 
 struct MockConfigData {
@@ -141,14 +141,13 @@ void test_memory_reclamation() {
 	writer.join();
 	
 	CORE_ASSERT(MockConfigData::destroy_count.load() == 1);
-	std::cout << "test_memory_reclamation passed.\n";
+	CORE_PASS("test_memory_reclamation");
 }
 
 int main() {
 	test_basic_rcu();
 	test_concurrent_read_heavy();
 	test_memory_reclamation();
-	std::cout << "All RCU tests passed.\n";
 	return 0;
 }
 

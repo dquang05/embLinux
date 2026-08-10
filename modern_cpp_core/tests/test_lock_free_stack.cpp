@@ -27,7 +27,7 @@ void test_single_thread() {
 	CORE_ASSERT(val1 && *val1 == 20);
 	CORE_ASSERT(val2 && *val2 == 10);
 	CORE_ASSERT(!val3);
-	std::cout << "test_single_thread passed.\n";
+	CORE_PASS("test_single_thread");
 }
 
 /**
@@ -65,7 +65,7 @@ void test_multi_thread() {
 	}
 
 	CORE_ASSERT(count == kNumThreads * kNumElements);
-	std::cout << "test_multi_thread passed.\n";
+	CORE_PASS("test_multi_thread");
 }
 
 /**
@@ -115,7 +115,7 @@ void test_extreme_contention_freelist() {
 	threads.clear(); // Waits for all jthreads to finish
 
 	CORE_ASSERT(successful_operations.load() == kNumThreads * kOperationsPerThread);
-	std::cout << "test_extreme_contention_freelist passed.\n";
+	CORE_PASS("test_extreme_contention_freelist");
 }
 
 /**
@@ -152,7 +152,7 @@ void test_aba_stress() {
 	}
 	
 	threads.clear();
-	std::cout << "test_aba_stress passed.\n";
+	CORE_PASS("test_aba_stress");
 }
 
 int main() {
@@ -160,7 +160,6 @@ int main() {
 	test_multi_thread();
 	test_extreme_contention_freelist();
 	test_aba_stress();
-	std::cout << "All LockFreeStack tests passed.\n";
 	return 0;
 }
 

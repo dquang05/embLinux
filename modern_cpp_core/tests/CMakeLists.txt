@@ -81,3 +81,17 @@ add_executable(test_parallel test_parallel.cpp)
 target_link_libraries(test_parallel PRIVATE core_patterns core_concurrency)
 target_compile_options(test_parallel PRIVATE -Wall -Wextra -Werror)
 add_test(NAME ParallelTest COMMAND test_parallel)
+
+add_executable(test_hazard_pointer test_hazard_pointer.cpp)
+target_link_libraries(test_hazard_pointer PRIVATE core_data_structures)
+target_compile_options(test_hazard_pointer PRIVATE -Wall -Wextra -Werror)
+add_test(NAME HazardPointerTest COMMAND test_hazard_pointer)
+
+set_tests_properties(
+    JThreadPoolTest RemainingModule1Test CoroutinesAdvancedTest
+    LockFreeStackTest LockFreeQueueTest ThreadSafeQueueTest
+    ThreadSafeHashMapTest RcuTest AlignedCacheLineTest
+    AtomicRefTest MonotonicMemoryPoolTest ConstinitTest
+    AtomicFloatTest PatternsTest ParallelTest HazardPointerTest
+    PROPERTIES TIMEOUT 10
+)

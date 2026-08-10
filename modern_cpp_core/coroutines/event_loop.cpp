@@ -1,5 +1,6 @@
 #include "event_loop.hpp"
 #include <unordered_map>
+#include <atomic>
 #include <stdexcept>
 #include <mutex>
 #include <system_error>
@@ -16,7 +17,7 @@ namespace core::coroutines {
 
 struct EventLoop::Impl {
 	int epoll_fd{-1};
-	bool running{false};
+	std::atomic<bool> running{false};
 	std::unordered_map<int, std::coroutine_handle<>> timers;
 	std::mutex mtx;
 

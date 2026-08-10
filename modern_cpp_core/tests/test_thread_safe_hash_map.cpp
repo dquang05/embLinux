@@ -25,7 +25,7 @@ void test_basic_operations() {
 	
 	map.remove("banana");
 	CORE_ASSERT(!map.get("banana"));
-	std::cout << "test_basic_operations passed.\n";
+	CORE_PASS("test_basic_operations");
 }
 
 /**
@@ -62,7 +62,7 @@ void test_concurrent_access() {
 			CORE_ASSERT(map.get(key) == key * 2);
 		}
 	}
-	std::cout << "test_concurrent_access passed.\n";
+	CORE_PASS("test_concurrent_access");
 }
 
 void test_mixed_workload() {
@@ -92,14 +92,13 @@ void test_mixed_workload() {
 	}
 	
 	threads.clear();
-	std::cout << "test_mixed_workload passed.\n";
+	CORE_PASS("test_mixed_workload");
 }
 
 int main() {
 	test_basic_operations();
 	test_concurrent_access();
 	test_mixed_workload();
-	std::cout << "All ThreadSafeHashMap tests passed.\n";
 	return 0;
 }
 

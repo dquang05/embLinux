@@ -2,7 +2,7 @@
 
 #include <atomic>
 #include <thread>
-#include <stdexcept>
+#include <expected>
 
 namespace core::data_structures {
 
@@ -15,6 +15,10 @@ struct HazardPointer {
 
 inline HazardPointer g_hazard_pointers[kMaxHazardPointers];
 
+enum class HazardPointerError {
+	NoAvailableHazardPointers
+};
+
 class HazardPointerOwner {
 private:
 	HazardPointer *m_hp;
@@ -23,32 +27,44 @@ public:
 	HazardPointerOwner(const HazardPointerOwner &) = delete;
 	HazardPointerOwner &operator=(const HazardPointerOwner &) = delete;
 
-	HazardPointerOwner() : m_hp(nullptr) {
+	HazardPointerOwner() : m_hp(nullptr) {}
+
+	bool try_acquire() {
+		if (m_hp) return true;
 		for (size_t i = 0; i < kMaxHazardPointers; ++i) {
 			std::thread::id old_id;
 			if (g_hazard_pointers[i].id.compare_exchange_strong(old_id, std::this_thread::get_id())) {
 				m_hp = &g_hazard_pointers[i];
-				break;
+				return true;
 			}
 		}
-		if (!m_hp) {
-			throw std::runtime_error("No available hazard pointers");
-		}
+		return false;
 	}
 
 	~HazardPointerOwner() {
-		m_hp->pointer.store(nullptr, std::memory_order_release);
-		m_hp->id.store(std::thread::id(), std::memory_order_release);
+		if (m_hp) {
+			m_hp->pointer.store(nullptr, std::memory_order_release);
+			m_hp->id.store(std::thread::id(), std::memory_order_release);
+		}
 	}
 
 	std::atomic<void *> &get_pointer() {
 		return m_hp->pointer;
 	}
+
+	bool is_valid() const {
+		return m_hp != nullptr;
+	}
 };
 
-inline std::atomic<void *> &get_hazard_pointer_for_current_thread() {
+inline std::expected<std::atomic<void *>*, HazardPointerError> get_hazard_pointer_for_current_thread() {
 	thread_local HazardPointerOwner hp_owner;
-	return hp_owner.get_pointer();
+	if (!hp_owner.is_valid()) {
+		if (!hp_owner.try_acquire()) {
+			return std::unexpected(HazardPointerError::NoAvailableHazardPointers);
+		}
+	}
+	return &hp_owner.get_pointer();
 }
 
 inline bool outstanding_hazard_pointers_for(void *p) {

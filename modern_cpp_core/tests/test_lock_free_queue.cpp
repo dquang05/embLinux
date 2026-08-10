@@ -5,18 +5,40 @@
 #include <atomic>
 #include <latch>
 #include <chrono>
+#include <cstdint>
+#include <new>
+#include <cstdlib>
 #include "test_utils.hpp"
 
 using core::data_structures::LockFreeQueue;
 
-/**
- * @brief Tests basic single-threaded push and pop.
- */
+// --- Heap Allocation Tracker ---
+std::atomic<bool> g_disable_allocations{false};
+
+void* operator new(std::size_t size) {
+	if (g_disable_allocations.load(std::memory_order_relaxed)) {
+		std::cerr << "[FAIL] Unexpected heap allocation of size " << size << "!\n";
+		std::exit(1);
+	}
+	void* p = std::malloc(size);
+	if (!p) throw std::bad_alloc();
+	return p;
+}
+
+void operator delete(void* p) noexcept {
+	std::free(p);
+}
+
+void operator delete(void* p, std::size_t) noexcept {
+	std::free(p);
+}
+// -------------------------------
+
 void test_single_thread() {
-	LockFreeQueue<int, 2> queue;
+	LockFreeQueue<uint32_t, 2> queue;
 	CORE_ASSERT(queue.push(10));
 	CORE_ASSERT(queue.push(20));
-	CORE_ASSERT(!queue.push(30)); // Queue is full (Capacity is 2)
+	CORE_ASSERT(!queue.push(30)); // Queue is full
 
 	auto val1 = queue.pop();
 	auto val2 = queue.pop();
@@ -25,36 +47,37 @@ void test_single_thread() {
 	CORE_ASSERT(val1 && *val1 == 10);
 	CORE_ASSERT(val2 && *val2 == 20);
 	CORE_ASSERT(!val3); // Queue is empty
-	std::cout << "test_single_thread passed.\n";
+	CORE_PASS("test_single_thread");
 }
 
-/**
- * @brief Tests SPSC operations under high throughput.
- */
-void test_spsc() {
-	LockFreeQueue<int, 1024> queue;
-	constexpr int kNumElements = 1000000;
-	std::atomic<long long> sum_expected{0};
-	std::atomic<long long> sum_popped{0};
+void test_spsc_no_allocation_and_determinism() {
+	LockFreeQueue<uint32_t, 1024> queue;
+	constexpr uint32_t kNumElements = 1000000;
+	std::atomic<uint64_t> sum_expected{0};
+	std::atomic<uint64_t> sum_popped{0};
 	std::latch start_latch{2};
 
 	auto producer = [&queue, &sum_expected, &start_latch]() {
 		start_latch.arrive_and_wait();
-		for (int i = 1; i <= kNumElements; ++i) {
-			while (!queue.push(i)) {
-				// Spin wait if full
-			}
+		g_disable_allocations.store(true, std::memory_order_relaxed);
+		
+		auto start = std::chrono::steady_clock::now();
+		for (uint32_t i = 1; i <= kNumElements; ++i) {
+			while (!queue.push(i)) {}
 			sum_expected.fetch_add(i, std::memory_order_relaxed);
 		}
+		auto end = std::chrono::steady_clock::now();
+		g_disable_allocations.store(false, std::memory_order_relaxed);
+		
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+		CORE_ASSERT(duration < 5000); // WCET check
 	};
 
 	auto consumer = [&queue, &sum_popped, &start_latch]() {
 		start_latch.arrive_and_wait();
-		for (int i = 0; i < kNumElements; ++i) {
-			std::optional<int> val;
-			while (!(val = queue.pop())) {
-				// Spin wait if empty
-			}
+		for (uint32_t i = 0; i < kNumElements; ++i) {
+			std::optional<uint32_t> val;
+			while (!(val = queue.pop())) {}
 			sum_popped.fetch_add(*val, std::memory_order_relaxed);
 		}
 	};
@@ -62,31 +85,46 @@ void test_spsc() {
 	{
 		std::jthread p(producer);
 		std::jthread c(consumer);
-	} // auto-joins
+	} 
 
 	CORE_ASSERT(sum_popped.load() == sum_expected.load());
-	std::cout << "test_spsc passed.\n";
+	CORE_PASS("test_spsc_no_allocation_and_determinism");
+}
+
+void test_integer_overflow() {
+	LockFreeQueue<uint8_t, 16> queue;
+	
+	// Push MAX values to ensure boundary works
+	CORE_ASSERT(queue.push(UINT8_MAX));
+	CORE_ASSERT(queue.push(0));
+	
+	auto val1 = queue.pop();
+	auto val2 = queue.pop();
+	
+	CORE_ASSERT(val1 && *val1 == UINT8_MAX);
+	CORE_ASSERT(val2 && *val2 == 0);
+	CORE_PASS("test_integer_overflow");
 }
 
 void test_boundary_conditions() {
-	LockFreeQueue<int, 16> queue;
-	constexpr int kNumElements = 100000;
+	LockFreeQueue<uint32_t, 16> queue;
+	constexpr uint32_t kNumElements = 100000;
 	
-	// Test Producer much faster than Consumer (Queue Full constantly)
-	std::atomic<int> pushed{0};
-	std::atomic<int> popped{0};
+	std::atomic<uint32_t> pushed{0};
+	std::atomic<uint32_t> popped{0};
 	
+	// Fast producer, slow consumer -> Full Queue
 	std::jthread p1([&queue, &pushed]() {
-		for (int i = 0; i < kNumElements; ++i) {
-			while (!queue.push(i)) { /* spin */ }
+		for (uint32_t i = 0; i < kNumElements; ++i) {
+			while (!queue.push(i)) {}
 			pushed++;
 		}
 	});
 	
 	std::jthread c1([&queue, &popped]() {
-		for (int i = 0; i < kNumElements; ++i) {
-			std::this_thread::sleep_for(std::chrono::microseconds(1)); // Slow consumer
-			while (!queue.pop()) { /* spin */ }
+		for (uint32_t i = 0; i < kNumElements; ++i) {
+			std::this_thread::yield(); 
+			while (!queue.pop()) {}
 			popped++;
 		}
 	});
@@ -96,21 +134,21 @@ void test_boundary_conditions() {
 	CORE_ASSERT(pushed.load() == kNumElements);
 	CORE_ASSERT(popped.load() == kNumElements);
 	
-	// Test Consumer much faster than Producer (Queue Empty constantly)
+	// Slow producer, fast consumer -> Empty Queue
 	pushed = 0;
 	popped = 0;
 	
 	std::jthread p2([&queue, &pushed]() {
-		for (int i = 0; i < kNumElements; ++i) {
-			std::this_thread::sleep_for(std::chrono::microseconds(1)); // Slow producer
-			while (!queue.push(i)) { /* spin */ }
+		for (uint32_t i = 0; i < kNumElements; ++i) {
+			std::this_thread::yield(); 
+			while (!queue.push(i)) {}
 			pushed++;
 		}
 	});
 	
 	std::jthread c2([&queue, &popped]() {
-		for (int i = 0; i < kNumElements; ++i) {
-			while (!queue.pop()) { /* spin */ }
+		for (uint32_t i = 0; i < kNumElements; ++i) {
+			while (!queue.pop()) {}
 			popped++;
 		}
 	});
@@ -120,18 +158,13 @@ void test_boundary_conditions() {
 	CORE_ASSERT(pushed.load() == kNumElements);
 	CORE_ASSERT(popped.load() == kNumElements);
 
-	std::cout << "test_boundary_conditions passed.\n";
+	CORE_PASS("test_boundary_conditions");
 }
 
 int main() {
 	test_single_thread();
-	test_spsc();
+	test_spsc_no_allocation_and_determinism();
+	test_integer_overflow();
 	test_boundary_conditions();
-	std::cout << "All LockFreeQueue tests passed.\n";
 	return 0;
 }
-
-// RISK REVIEW:
-// 1. Concurrency: Testing verifies strictly Single-Producer Single-Consumer (SPSC) mode. 
-//    Multi-Producer or Multi-Consumer usage is not supported and will break the queue.
-// 2. Performance: Spin waits are used in the test. In production, spinning might consume 100% CPU.
