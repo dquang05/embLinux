@@ -3,6 +3,8 @@
 #include <thread>
 #include <vector>
 #include <cassert>
+#include <latch>
+#include "test_utils.hpp"
 
 using core::data_structures::LockFreeStack;
 
@@ -12,17 +14,19 @@ using core::data_structures::LockFreeStack;
  * @note Ensures basic push and pop functionality works as expected.
  */
 void test_single_thread() {
-	LockFreeStack<int> stack;
-	stack.push(10);
-	stack.push(20);
+	LockFreeStack<int, 10> stack;
+	bool p1 = stack.push(10);
+	bool p2 = stack.push(20);
+	
+	CORE_ASSERT(p1 && p2);
 
 	auto val1 = stack.pop();
 	auto val2 = stack.pop();
 	auto val3 = stack.pop();
 
-	assert(val1 && *val1 == 20);
-	assert(val2 && *val2 == 10);
-	assert(!val3);
+	CORE_ASSERT(val1 && *val1 == 20);
+	CORE_ASSERT(val2 && *val2 == 10);
+	CORE_ASSERT(!val3);
 	std::cout << "test_single_thread passed.\n";
 }
 
@@ -33,13 +37,17 @@ void test_single_thread() {
  *       if all elements were successfully pushed and can be popped.
  */
 void test_multi_thread() {
-	LockFreeStack<int> stack;
 	constexpr int kNumThreads = 10;
 	constexpr int kNumElements = 1000;
+	LockFreeStack<int, kNumThreads * kNumElements> stack;
 
-	auto worker_push = [&stack]() {
+	std::latch start_latch{kNumThreads};
+
+	auto worker_push = [&stack, &start_latch]() {
+		start_latch.arrive_and_wait();
 		for (int i = 0; i < kNumElements; ++i) {
-			stack.push(i);
+			bool success = stack.push(i);
+			CORE_ASSERT(success);
 		}
 	};
 
@@ -56,7 +64,7 @@ void test_multi_thread() {
 		++count;
 	}
 
-	assert(count == kNumThreads * kNumElements);
+	CORE_ASSERT(count == kNumThreads * kNumElements);
 	std::cout << "test_multi_thread passed.\n";
 }
 
@@ -68,19 +76,23 @@ void test_multi_thread() {
  *       and push it back. This causes extreme contention which would bottleneck a Mutex.
  */
 void test_extreme_contention_freelist() {
-	LockFreeStack<int> free_list;
 	constexpr int kInitialPoolSize = 1000;
 	constexpr int kNumThreads = 10;
 	constexpr int kOperationsPerThread = 10000;
+	
+	LockFreeStack<int, kInitialPoolSize + kNumThreads> free_list;
 
 	// Initialize the pool with 1000 reusable objects
 	for (int i = 0; i < kInitialPoolSize; ++i) {
-		free_list.push(0);
+		bool success = free_list.push(0);
+		CORE_ASSERT(success);
 	}
 
 	std::atomic<int> successful_operations{0};
+	std::latch start_latch{kNumThreads};
 
-	auto worker = [&free_list, &successful_operations]() {
+	auto worker = [&free_list, &successful_operations, &start_latch]() {
+		start_latch.arrive_and_wait();
 		for (int i = 0; i < kOperationsPerThread; ++i) {
 			// Simulate: Thread tries to acquire an object from the Free List
 			if (auto obj = free_list.pop()) {
@@ -88,7 +100,8 @@ void test_extreme_contention_freelist() {
 				*obj = i; 
 				
 				// Return the object immediately to the Free List
-				free_list.push(*obj);
+				bool success = free_list.push(*obj);
+				CORE_ASSERT(success);
 				successful_operations.fetch_add(1, std::memory_order_relaxed);
 			}
 		}
@@ -101,7 +114,7 @@ void test_extreme_contention_freelist() {
 	
 	threads.clear(); // Waits for all jthreads to finish
 
-	assert(successful_operations.load() == kNumThreads * kOperationsPerThread);
+	CORE_ASSERT(successful_operations.load() == kNumThreads * kOperationsPerThread);
 	std::cout << "test_extreme_contention_freelist passed.\n";
 }
 
@@ -112,15 +125,19 @@ void test_extreme_contention_freelist() {
  *       across multiple threads will likely trigger an ABA bug or segmentation fault.
  */
 void test_aba_stress() {
-	LockFreeStack<int> stack;
 	constexpr int kNumThreads = 4;
-	constexpr int kOperations = 10000;
+	constexpr int kOperations = 100000; // Increased operations for stress testing
+	
+	LockFreeStack<int, 200> stack;
 	
 	for (int i = 0; i < 100; ++i) {
 		stack.push(i);
 	}
 
-	auto worker = [&stack]() {
+	std::latch start_latch{kNumThreads};
+
+	auto worker = [&stack, &start_latch]() {
+		start_latch.arrive_and_wait();
 		for (int i = 0; i < kOperations; ++i) {
 			auto val = stack.pop();
 			if (val) {

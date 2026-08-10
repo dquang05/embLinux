@@ -15,7 +15,7 @@ namespace core::concurrency {
  * @param old_val The expected old value before waiting (usually load() result).
  * @param pred The predicate to evaluate after waking up.
  */
-template <typename T, std::predicate Predicate>
+template <typename T, std::predicate<> Predicate>
 inline void atomic_wait_until(std::atomic<T>& atomic_var, T old_val, Predicate pred) {
     while (!pred()) {
         atomic_var.wait(old_val, std::memory_order_relaxed);

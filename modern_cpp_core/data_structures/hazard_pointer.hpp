@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <thread>
-#include <functional>
 #include <stdexcept>
 
 namespace core::data_structures {
@@ -54,7 +53,7 @@ inline std::atomic<void *> &get_hazard_pointer_for_current_thread() {
 
 inline bool outstanding_hazard_pointers_for(void *p) {
 	for (size_t i = 0; i < kMaxHazardPointers; ++i) {
-		if (g_hazard_pointers[i].pointer.load(std::memory_order_acquire) == p) {
+		if (g_hazard_pointers[i].pointer.load(std::memory_order_seq_cst) == p) {
 			return true;
 		}
 	}
@@ -68,7 +67,7 @@ void do_delete(void *p) {
 
 struct DataToReclaim {
 	void *data;
-	std::function<void(void *)> deleter;
+	void (*deleter)(void *);
 	DataToReclaim *next;
 
 	template <typename T>

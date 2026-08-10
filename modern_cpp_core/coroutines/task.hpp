@@ -4,6 +4,7 @@
 #include <coroutine>
 #include <exception>
 #include <utility>
+#include "coroutine_pool.hpp"
 
 namespace core::coroutines {
 
@@ -21,6 +22,14 @@ public:
 	using handle_type = std::coroutine_handle<promise_type>;
 
 	struct promise_type {
+		static void *operator new(std::size_t size) {
+			return CoroutinePoolAllocator::allocate(size);
+		}
+		
+		static void operator delete(void *ptr, std::size_t size) noexcept {
+			CoroutinePoolAllocator::deallocate(ptr, size);
+		}
+
 		T m_value;
 		std::exception_ptr m_exception;
 		std::coroutine_handle<> m_continuation;
@@ -113,6 +122,14 @@ public:
 	using handle_type = std::coroutine_handle<promise_type>;
 
 	struct promise_type {
+		static void *operator new(std::size_t size) {
+			return CoroutinePoolAllocator::allocate(size);
+		}
+		
+		static void operator delete(void *ptr, std::size_t size) noexcept {
+			CoroutinePoolAllocator::deallocate(ptr, size);
+		}
+
 		std::exception_ptr m_exception;
 		std::coroutine_handle<> m_continuation;
 

@@ -3,12 +3,14 @@
 
 #include <vector>
 #include <queue>
+#include <deque>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <future>
 #include <memory>
 #include <expected>
+#include <optional>
 #include <system_error>
 #include "fixed_task.hpp"
 
@@ -47,17 +49,31 @@ public:
 	 */
 	template<typename F>
 	void execute(F&& f) {
-		{
-			std::scoped_lock lock(m_queue_mutex);
+		if (auto idx = get_worker_index(); idx.has_value() && *idx < m_local_queues.size()) {
+			std::scoped_lock lock(m_local_queues[*idx]->m_mutex);
 			if (m_is_shutdown) {
 				return;
 			}
-			m_task_queue.emplace(std::forward<F>(f));
+			m_local_queues[*idx]->m_queue.emplace_back(std::forward<F>(f));
+		} else {
+			{
+				std::scoped_lock lock(m_queue_mutex);
+				if (m_is_shutdown) {
+					return;
+				}
+				m_task_queue.emplace(std::forward<F>(f));
+			}
 		}
 		m_cv.notify_one();
 	}
 
 private:
+	struct WorkerQueue {
+		std::mutex m_mutex;
+		std::deque<FixedTask<64>> m_queue;
+	};
+
+	static std::optional<std::size_t> get_worker_index();
 	// Private constructor used by create()
 	explicit JThreadPool(std::size_t thread_count);
 
@@ -67,12 +83,12 @@ private:
 	 */
 	void worker_loop(std::stop_token stoken);
 
-	std::vector<std::jthread> m_workers;
-	std::queue<FixedTask<64>> m_task_queue;
-	
 	std::mutex m_queue_mutex;
 	std::condition_variable_any m_cv;
 	bool m_is_shutdown{false};
+	std::queue<FixedTask<64>> m_task_queue;
+	std::vector<std::unique_ptr<WorkerQueue>> m_local_queues;
+	std::vector<std::jthread> m_workers; // MUST be last so it joins before other members are destroyed!
 };
 
 } // namespace core::concurrency

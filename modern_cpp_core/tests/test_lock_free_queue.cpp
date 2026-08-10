@@ -3,6 +3,9 @@
 #include <thread>
 #include <cassert>
 #include <atomic>
+#include <latch>
+#include <chrono>
+#include "test_utils.hpp"
 
 using core::data_structures::LockFreeQueue;
 
@@ -11,17 +14,17 @@ using core::data_structures::LockFreeQueue;
  */
 void test_single_thread() {
 	LockFreeQueue<int, 2> queue;
-	assert(queue.push(10));
-	assert(queue.push(20));
-	assert(!queue.push(30)); // Queue is full (Capacity is 2)
+	CORE_ASSERT(queue.push(10));
+	CORE_ASSERT(queue.push(20));
+	CORE_ASSERT(!queue.push(30)); // Queue is full (Capacity is 2)
 
 	auto val1 = queue.pop();
 	auto val2 = queue.pop();
 	auto val3 = queue.pop();
 
-	assert(val1 && *val1 == 10);
-	assert(val2 && *val2 == 20);
-	assert(!val3); // Queue is empty
+	CORE_ASSERT(val1 && *val1 == 10);
+	CORE_ASSERT(val2 && *val2 == 20);
+	CORE_ASSERT(!val3); // Queue is empty
 	std::cout << "test_single_thread passed.\n";
 }
 
@@ -33,8 +36,10 @@ void test_spsc() {
 	constexpr int kNumElements = 1000000;
 	std::atomic<long long> sum_expected{0};
 	std::atomic<long long> sum_popped{0};
+	std::latch start_latch{2};
 
-	auto producer = [&queue, &sum_expected]() {
+	auto producer = [&queue, &sum_expected, &start_latch]() {
+		start_latch.arrive_and_wait();
 		for (int i = 1; i <= kNumElements; ++i) {
 			while (!queue.push(i)) {
 				// Spin wait if full
@@ -43,7 +48,8 @@ void test_spsc() {
 		}
 	};
 
-	auto consumer = [&queue, &sum_popped]() {
+	auto consumer = [&queue, &sum_popped, &start_latch]() {
+		start_latch.arrive_and_wait();
 		for (int i = 0; i < kNumElements; ++i) {
 			std::optional<int> val;
 			while (!(val = queue.pop())) {
@@ -58,13 +64,69 @@ void test_spsc() {
 		std::jthread c(consumer);
 	} // auto-joins
 
-	assert(sum_popped.load() == sum_expected.load());
+	CORE_ASSERT(sum_popped.load() == sum_expected.load());
 	std::cout << "test_spsc passed.\n";
+}
+
+void test_boundary_conditions() {
+	LockFreeQueue<int, 16> queue;
+	constexpr int kNumElements = 100000;
+	
+	// Test Producer much faster than Consumer (Queue Full constantly)
+	std::atomic<int> pushed{0};
+	std::atomic<int> popped{0};
+	
+	std::jthread p1([&queue, &pushed]() {
+		for (int i = 0; i < kNumElements; ++i) {
+			while (!queue.push(i)) { /* spin */ }
+			pushed++;
+		}
+	});
+	
+	std::jthread c1([&queue, &popped]() {
+		for (int i = 0; i < kNumElements; ++i) {
+			std::this_thread::sleep_for(std::chrono::microseconds(1)); // Slow consumer
+			while (!queue.pop()) { /* spin */ }
+			popped++;
+		}
+	});
+	
+	p1.join();
+	c1.join();
+	CORE_ASSERT(pushed.load() == kNumElements);
+	CORE_ASSERT(popped.load() == kNumElements);
+	
+	// Test Consumer much faster than Producer (Queue Empty constantly)
+	pushed = 0;
+	popped = 0;
+	
+	std::jthread p2([&queue, &pushed]() {
+		for (int i = 0; i < kNumElements; ++i) {
+			std::this_thread::sleep_for(std::chrono::microseconds(1)); // Slow producer
+			while (!queue.push(i)) { /* spin */ }
+			pushed++;
+		}
+	});
+	
+	std::jthread c2([&queue, &popped]() {
+		for (int i = 0; i < kNumElements; ++i) {
+			while (!queue.pop()) { /* spin */ }
+			popped++;
+		}
+	});
+	
+	p2.join();
+	c2.join();
+	CORE_ASSERT(pushed.load() == kNumElements);
+	CORE_ASSERT(popped.load() == kNumElements);
+
+	std::cout << "test_boundary_conditions passed.\n";
 }
 
 int main() {
 	test_single_thread();
 	test_spsc();
+	test_boundary_conditions();
 	std::cout << "All LockFreeQueue tests passed.\n";
 	return 0;
 }

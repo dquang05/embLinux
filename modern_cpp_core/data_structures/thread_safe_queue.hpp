@@ -2,14 +2,14 @@
 
 #include <queue>
 #include <mutex>
-#include <condition_variable>
+#include <semaphore>
 #include <optional>
 #include <concepts>
 
 namespace core::data_structures {
 
 /**
- * @brief A thread-safe queue leveraging C++20 concepts and std::mutex.
+ * @brief A thread-safe queue leveraging C++20 concepts and counting_semaphore.
  * 
  * @tparam T The type of elements stored in the queue. Must satisfy std::movable.
  */
@@ -18,7 +18,7 @@ class ThreadSafeQueue {
 private:
 	std::queue<T> m_queue;
 	mutable std::mutex m_mutex;
-	std::condition_variable m_cond;
+	std::counting_semaphore<> m_sem{0};
 
 public:
 	ThreadSafeQueue() = default;
@@ -37,7 +37,7 @@ public:
 			std::scoped_lock lock(m_mutex);
 			m_queue.push(std::move(value));
 		}
-		m_cond.notify_one();
+		m_sem.release();
 	}
 
 	/**
@@ -61,8 +61,8 @@ public:
 	 * @return T The popped element.
 	 */
 	T wait_and_pop() {
-		std::unique_lock lock(m_mutex);
-		m_cond.wait(lock, [this] { return !m_queue.empty(); });
+		m_sem.acquire();
+		std::scoped_lock lock(m_mutex);
 		T value = std::move(m_queue.front());
 		m_queue.pop();
 		return value;

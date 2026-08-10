@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <utility>
 #include <new>
+#include <concepts>
 
 namespace core::concurrency {
 
@@ -37,7 +38,8 @@ private:
 public:
     FixedTask() noexcept = default;
 
-    template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, FixedTask>>>
+    template <typename F>
+    requires (!std::same_as<std::decay_t<F>, FixedTask>)
     FixedTask(F&& f) {
         using M = Model<std::decay_t<F>>;
         static_assert(sizeof(M) <= Capacity, "Lambda capture size exceeds FixedTask capacity! Hidden heap allocation prevented.");

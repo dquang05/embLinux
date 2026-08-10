@@ -55,3 +55,14 @@ My library for **Embedded Systems** and **High-Performance Backend** environment
 - **Edge Case Verification**: Tests must explicitly verify all edge cases (null inputs, empty inputs, max boundaries) outlined in the Risk Review.
 - **Concurrency & Sanitizers**: All multithreaded code must be compiled and tested with **ThreadSanitizer (TSan)** (`-fsanitize=thread`) to automatically detect Data Races, Deadlocks, and Livelocks. Tests must intentionally provoke high contention.
 - **Test Output**: Tests must print `PASS`/`FAIL` for each case and return a non-zero exit code if any test fails, enabling CI/CD automation.
+- **Test Execution Environment & Commands**:
+  - **Do NOT mix Sanitizers**: AddressSanitizer (ASan) and ThreadSanitizer (TSan) are mutually exclusive. Always clear the CMake cache before switching sanitizers.
+  - **ASLR Workaround for TSan**: ThreadSanitizer has a known bug with Address Space Layout Randomization (ASLR) on modern Linux kernels, causing `unexpected memory mapping` crashes. Wrapping the test execution with `setarch x86_64 -R` (which disables ASLR for that specific process) is the industry-standard workaround for CI/CD testing. This **does not** lower production safety, as ASLR remains fully active on the embedded target when compiled for release without sanitizers.
+  - **Standardized Test Routine**: Developers must use the following commands to build and run tests:
+    ```bash
+    cd /home/quangtran/Projects/embLinux/modern_cpp_core/build
+    rm -f CMakeCache.txt
+    cmake -DENABLE_ASAN=OFF -DENABLE_TSAN=ON ..
+    make -j$(nproc)
+    setarch x86_64 -R ctest -V
+    ```

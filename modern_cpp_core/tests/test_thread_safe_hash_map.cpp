@@ -4,6 +4,8 @@
 #include <vector>
 #include <cassert>
 #include <string>
+#include <latch>
+#include "test_utils.hpp"
 
 using core::data_structures::ThreadSafeHashMap;
 
@@ -15,14 +17,14 @@ void test_basic_operations() {
 	map.insert("apple", 10);
 	map.insert("banana", 20);
 	
-	assert(map.get("apple") == 10);
-	assert(map.get("banana") == 20);
+	CORE_ASSERT(map.get("apple") == 10);
+	CORE_ASSERT(map.get("banana") == 20);
 	
 	map.insert("apple", 15); // Update existing
-	assert(map.get("apple") == 15);
+	CORE_ASSERT(map.get("apple") == 15);
 	
 	map.remove("banana");
-	assert(!map.get("banana"));
+	CORE_ASSERT(!map.get("banana"));
 	std::cout << "test_basic_operations passed.\n";
 }
 
@@ -33,14 +35,17 @@ void test_concurrent_access() {
 	ThreadSafeHashMap<int, int> map;
 	constexpr int kNumThreads = 10;
 	constexpr int kOperations = 1000;
+	
+	std::latch start_latch{kNumThreads};
 
-	auto worker = [&map](int thread_id) {
+	auto worker = [&map, &start_latch](int thread_id) {
+		start_latch.arrive_and_wait();
 		for (int i = 0; i < kOperations; ++i) {
 			int key = thread_id * kOperations + i;
 			map.insert(key, key * 2);
 			
 			auto val = map.get(key);
-			assert(val && *val == key * 2);
+			CORE_ASSERT(val && *val == key * 2);
 		}
 	};
 
@@ -54,15 +59,46 @@ void test_concurrent_access() {
 	for (int i = 0; i < kNumThreads; ++i) {
 		for (int j = 0; j < kOperations; ++j) {
 			int key = i * kOperations + j;
-			assert(map.get(key) == key * 2);
+			CORE_ASSERT(map.get(key) == key * 2);
 		}
 	}
 	std::cout << "test_concurrent_access passed.\n";
 }
 
+void test_mixed_workload() {
+	ThreadSafeHashMap<int, int> map;
+	constexpr int kNumThreads = 12;
+	constexpr int kOperations = 1000;
+	std::latch start_latch{kNumThreads};
+
+	auto worker = [&map, &start_latch](int thread_id) {
+		start_latch.arrive_and_wait();
+		for (int i = 0; i < kOperations; ++i) {
+			int key = (thread_id * kOperations + i) % 100; // High collision and contention
+			
+			if (i % 3 == 0) {
+				map.insert(key, key * 2);
+			} else if (i % 3 == 1) {
+				map.get(key); // Just reading, might return null or value, both fine
+			} else {
+				map.remove(key);
+			}
+		}
+	};
+
+	std::vector<std::jthread> threads;
+	for (int i = 0; i < kNumThreads; ++i) {
+		threads.emplace_back(worker, i);
+	}
+	
+	threads.clear();
+	std::cout << "test_mixed_workload passed.\n";
+}
+
 int main() {
 	test_basic_operations();
 	test_concurrent_access();
+	test_mixed_workload();
 	std::cout << "All ThreadSafeHashMap tests passed.\n";
 	return 0;
 }
