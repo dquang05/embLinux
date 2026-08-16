@@ -29,7 +29,7 @@ The crown jewel of this repository. Built for **Real-Time Embedded Linux** and *
 
 The architecture of `modern_cpp_core` was heavily inspired by the following foundational studies contained in this repository:
 
-### 1. `Linux System (building)`
+### 1. `linux_system_engineering/`
 
 
 ### 2. `C++_ConcurrencyInAction/`
@@ -37,7 +37,7 @@ Legacy implementations based on *C++ Concurrency in Action*. These contain the c
 - **`threads/`**: Thread lifecycle management and data sharing fundamentals.
 - **`synchronizingConcurrency/`**: Advanced synchronization (`std::condition_variable`, `std::future`, async tasks).
 - **`memory_atomicOperation/`**: Deep dive into the C++ Memory Model, `std::atomic`, and lock-free structures (e.g., Treiber Stack).
-- **`designLockBase/` & `designLockFree/`**: Designing thread-safe data structures with and without locks.
+- **`designLockBase/` & `designLockFree/`**: Designing thread-safe data structures with and without locks.  
 - **`designConcurrentCode/`**: Real-world concurrency issues (False Sharing, Exception Safety) and parallel algorithms.
 - **`advancedThreadsManagement/`**: Advanced architectural patterns (Work-stealing Thread Pools, Deadlock-free pools).
 
