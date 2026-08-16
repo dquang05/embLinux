@@ -29,15 +29,8 @@ The crown jewel of this repository. Built for **Real-Time Embedded Linux** and *
 
 The architecture of `modern_cpp_core` was heavily inspired by the following foundational studies contained in this repository:
 
-### 1. `LSPI/` (Linux System Programming Interface)
-Implemented in standard **C**, focusing on the kernel-user space boundary. Inspired by *Operating System Concepts(10th edition)*.
-- **`lib/`**: Custom utility library (error handling, numeric parsing) designed to streamline system call error checking.
-- **`syntax/`**: Topic-based practical implementations:
-  - `01_io/`: Low-level File I/O operations and buffering strategies.
-  - `02_process/`: Process lifecycle management (features a custom `miniShell` implementation).
-  - `03_signal/`: POSIX signal handling and safe asynchronous execution.
-  - `04_ipc/`: Inter-Process Communication (Pipes, FIFOs, POSIX Message Queues, Memory Mapping `mmap`).
-  - `05_threads/`: POSIX Threads (pthreads) implementation basics.
+### 1. `Linux System (building)`
+
 
 ### 2. `C++_ConcurrencyInAction/`
 Legacy implementations based on *C++ Concurrency in Action*. These contain the classic C++11/14 threading and synchronization patterns that `modern_cpp_core` aims to solve and deprecate.
