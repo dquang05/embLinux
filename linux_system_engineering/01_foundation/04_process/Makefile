@@ -4,25 +4,23 @@ CFLAGS = -Wall -Wextra -Werror -g -I./include
 SRC_DIR = src
 OBJ_DIR = build
 SOURCES = $(wildcard $(SRC_DIR)/*.c)
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
-TARGET = $(OBJ_DIR)/demo_app
+# Create a list of target executables corresponding to each source file
+TARGETS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%)
 
 # Do not build if no source files exist
 ifeq ($(strip $(SOURCES)),)
 all:
 	@echo "No source files found in $(SRC_DIR). Nothing to build."
 else
-all: dir $(TARGET)
+all: dir $(TARGETS)
 endif
 
 dir:
 	@mkdir -p $(OBJ_DIR)
 
-$(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $^ -o $@
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Rule to build each target executable from its source file
+$(OBJ_DIR)/%: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) $< -o $@
 
 clean:
 	rm -rf $(OBJ_DIR)
