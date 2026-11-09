@@ -15,7 +15,7 @@
 #include <time.h>
 #include <sys/times.h>
 #include <unistd.h>
-#include <errno.h>
+//#include <errno.h>
 
 /**
  * @brief Performs simulated work consuming both user-mode and system-mode CPU time.
