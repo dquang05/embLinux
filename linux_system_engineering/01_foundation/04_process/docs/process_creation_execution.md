@@ -4,14 +4,13 @@
 
 ### `fork()` and Copy-On-Write (COW)
 - `fork()` creates a child process that is an almost exact duplicate of the parent process.
-- **File Descriptor Sharing:** The child receives copies of all open file descriptors from the parent. Both point to the same *open file description* table. To avoid I/O conflicts, unnecessary file descriptors should be closed in the child if not shared.
-- **Copy-On-Write (COW):** For performance optimization, modern OSes do not copy the entire RAM immediately upon `fork()`. Instead, parent and child point to the same physical memory pages with *read-only* permissions. Only when one attempts to write/modify a variable does the kernel actually copy that specific page to a private memory area for that process.
+- **File Descriptor Sharing:** After `fork()`, parent and child have separate file descriptor tables. Corresponding inherited descriptors refer to the same kernel *open file description*, sharing its file offset and file status flags. Descriptor flags such as `FD_CLOEXEC` belong to each descriptor, not to that shared open file description. Close unnecessary inherited descriptors in each process.
+- **Copy-On-Write (COW):** Linux commonly implements inherited private writable mappings using COW: parent and child initially share pages, and a write may trigger a private copy. `MAP_SHARED` mappings retain shared-update semantics. COW is an implementation strategy, not a POSIX requirement.
 
 ### `vfork()` Function
-- An optimized version designed specifically for the scenario where a process is created and `exec()` is called immediately after.
-- The child process **completely shares** the parent's memory space. The parent process is **blocked** until the child calls `exec()` or terminates.
+- On Linux, `vfork()` shares the parent's address space until the child successfully executes a new image or terminates, suspending the calling thread during that time. Other parent threads may continue running in the shared address space.
 - > [!WARNING]  
-  > If the child modifies a variable or returns from a function using `vfork()`, it will corrupt the parent's memory. Extremely dangerous; use only when micro-optimization is strictly required.
+  > The child must not return from the calling function, modify shared data except for the `pid_t` return-value variable, or call other functions before an `exec` function or `_exit()`; do not call `exit()`. Violations have undefined behavior under the historical specification. POSIX.1-2008 removed `vfork()`; prefer `posix_spawn()` or `fork()` and `exec()` rather than treating it as a general optimization.
 
 ### `clone()` Function (Linux Specific)
 - Similar to `fork()`, but `clone()` allows developers extremely fine-grained control over what the parent and child will share (via `flags`).
@@ -26,6 +25,8 @@
   - `execv`, `execvp`, `execvpe` (**v**: accepts arguments as a vector/array).
   - **p**: Automatically searches for the executable in the `PATH` environment variable.
   - **e**: Allows passing a custom environment variable array.
+  - `execvpe()` is a GNU extension requiring `_GNU_SOURCE` in glibc. Its executable search uses the caller's `PATH`, not the `PATH` in its `envp` argument; a filename containing a slash bypasses PATH lookup.
+- After a successful `execve()`, caught signal dispositions are reset to default; ignored dispositions generally remain ignored. POSIX permits an exception for ignored `SIGCHLD`, which Linux retains.
 
 ### File Descriptors and the `close-on-exec` flag (`FD_CLOEXEC`)
 - By default, open File Descriptors **remain open** after calling `exec()`. Shells exploit this to perform I/O Redirection.
@@ -33,6 +34,6 @@
   > For security (preventing sensitive files from being exposed to the new program) and resource leak prevention, developers should set the `FD_CLOEXEC` flag for file descriptors (via `fcntl`). The kernel will automatically close this FD as soon as `exec()` succeeds.
 
 ### Warning regarding `system()`
-- The `system(command)` function is convenient for running shell commands (e.g., `system("ls -l")`), but it creates at least 2 processes (1 for the `/bin/sh` shell, 1 for the command).
+- The `system(command)` function runs a command through a shell (e.g., `system("ls -l")`); the number of processes involved is not fixed, since commands can be shell builtins or executed using different shell strategies.
 - > [!CAUTION]
   > **Never use `system()` in privileged programs (like Set-User-ID root)**. Attackers can manipulate the `PATH` or `IFS` environment variables to force your program to execute malicious code as root.

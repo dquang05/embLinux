@@ -19,7 +19,7 @@ dir:
 	@mkdir -p $(OBJ_DIR)
 
 # Rule to build each target executable from its source file
-$(OBJ_DIR)/%: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%: $(SRC_DIR)/%.c | dir
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:

@@ -16,14 +16,14 @@
 ## 3. Linux Scheduling
 
 ### Linux CFS (Completely Fair Scheduler)
-This is the current default scheduler in Linux.
+Historically, CFS became Linux's default fair scheduler in Linux 2.6.23. Linux began transitioning fair scheduling to EEVDF in Linux 6.6; exact behavior depends on the kernel version and configuration.
 - CFS does not use fixed *time quanta* but allocates a "percentage" of CPU time based on priority (nice value).
-- It uses a Red-Black tree to track virtual runtime (`vruntime`). The process with the smallest `vruntime` (leftmost node on the tree) is allocated the CPU next.
+- Historically, CFS used a Red-Black tree ordered by virtual runtime (`vruntime`) and selected the leftmost runnable task. EEVDF instead selects an eligible task with the earliest virtual deadline.
 
 ### Priorities and "Nice" values
-The `nice` attribute allows adjusting process priority in CFS:
+The `nice` attribute adjusts the weight of tasks under Linux fair scheduling:
 - Ranges from **-20 (highest priority)** to **+19 (lowest priority)**. Default is 0.
-- Normal users can only *decrease* their priority (increase `nice` > 0). Only privileged users (root) can *increase* priority (negative nice).
+- Unprivileged processes normally cannot lower a nice value, but on Linux a suitable `RLIMIT_NICE` can allow it. `CAP_SYS_NICE` can grant additional permission; target ownership and permission checks also apply.
 - Use `getpriority()` and `setpriority()` functions to adjust.
 
 ### Realtime Scheduling
@@ -31,8 +31,8 @@ Designed for processes requiring extremely low latency. Linux supports POSIX Rea
 - **SCHED_FIFO (First-In First-Out):** The process runs until it terminates, voluntarily blocks, or is preempted by a higher-priority realtime process. Does not share time slices.
 - **SCHED_RR (Round-Robin):** Similar to FIFO, but processes with the same priority share time slices.
 - > [!IMPORTANT]
-  > Any realtime process (priority 1 to 99) will always preempt all normal processes (SCHED_OTHER). Developers must be extremely careful to avoid hanging the system if a realtime process gets stuck in an infinite loop.
+  > Runnable `SCHED_FIFO` and `SCHED_RR` tasks normally outrank `SCHED_OTHER` tasks on eligible CPUs, subject to affinity, higher scheduling classes and RT bandwidth constraints such as throttling. A runaway realtime task can still make a system unresponsive.
 
 ## 4. Multicore Scheduling
 - **SMP (Symmetric Multiprocessing):** Cores share the load. Utilizes Load Balancing (Push and Pull migration) to distribute processes from busy cores to idle ones.
-- **Processor Affinity:** Moving a process from one core to another causes data loss in the cache (Cache miss), degrading performance. Developers can use the `sched_setaffinity()` function to "pin" a process to a specific CPU core to optimize computational speed.
+- **Processor Affinity:** Migrating execution between CPU cores may reduce cache locality and cause additional cache misses and memory-access costs, depending on the workload and architecture; it does not lose valid program data or bypass cache coherence. On Linux, `sched_setaffinity()` sets a task/thread's eligible CPUs, so pinning a thread may improve locality but does not guarantee better performance.

@@ -7,7 +7,10 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <signal.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -34,6 +37,10 @@ int main() {
      * Data written to the write end is buffered by the kernel until it is read 
      * from the read end.
      */
+    if (fflush(stdout) == EOF) {
+        perror("fflush failed");
+        return EXIT_FAILURE;
+    }
     if (pipe(pipefd) == -1) {
         perror("pipe failed");
         exit(EXIT_FAILURE);
@@ -48,6 +55,8 @@ int main() {
 
     if (pid < 0) {
         perror("fork failed");
+        close(pipefd[0]);
+        close(pipefd[1]);
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
         /* 
@@ -57,18 +66,51 @@ int main() {
          */
         close(pipefd[0]); // Close unused read end
 
-        printf("Parent (PID %d): Writing message to pipe...\n", getpid());
-        if (write(pipefd[1], write_msg, strlen(write_msg) + 1) == -1) {
-            perror("write failed");
-            close(pipefd[1]);
-            exit(EXIT_FAILURE);
+        printf("Parent (PID %jd): Writing message to pipe...\n", (intmax_t)getpid());
+        int failed = 0;
+        struct sigaction action = {0};
+        action.sa_handler = SIG_IGN;
+        sigemptyset(&action.sa_mask);
+        if (sigaction(SIGPIPE, &action, NULL) == -1) {
+            perror("sigaction failed");
+            failed = 1;
+        }
+        /* A missing reader then produces EPIPE instead of terminating the parent. */
+        size_t written = 0;
+        while (!failed && written < sizeof(write_msg)) {
+            ssize_t n = write(pipefd[1], write_msg + written, sizeof(write_msg) - written);
+            if (n == -1 && errno == EINTR) {
+                continue;
+            }
+            if (n <= 0) {
+                if (n == -1) perror("write failed");
+                else fprintf(stderr, "write made no progress\n");
+                failed = 1;
+                break;
+            }
+            written += (size_t)n;
         }
 
-        close(pipefd[1]); // Close write end after writing (sends EOF to reader)
+        if (close(pipefd[1]) == -1) {
+            perror("close write end failed");
+            failed = 1;
+        }
         
         /* Wait for child to finish to avoid zombie */
-        waitpid(pid, NULL, 0);
-        printf("Parent (PID %d): Child finished. Exiting.\n", getpid());
+        int status;
+        pid_t waited;
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited == -1 && errno == EINTR);
+        if (waited == -1) {
+            perror("waitpid failed");
+            return EXIT_FAILURE;
+        }
+        if (failed || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            fprintf(stderr, "Pipe transfer or child failed.\n");
+            return EXIT_FAILURE;
+        }
+        printf("Parent (PID %jd): Child finished. Exiting.\n", (intmax_t)getpid());
         
     } else {
         /* 
@@ -78,20 +120,37 @@ int main() {
          */
         close(pipefd[1]); // Close unused write end
         
-        printf("Child (PID %d): Waiting to read from pipe...\n", getpid());
+        printf("Child (PID %jd): Waiting to read from pipe...\n", (intmax_t)getpid());
         
-        /* Read from the pipe. This call will block until the parent writes something. */
-        ssize_t bytes_read = read(pipefd[0], read_msg, BUFFER_SIZE);
-        if (bytes_read == -1) {
-            perror("read failed");
+        /* The fixed message includes a NUL; pipe reads need not match writes. */
+        size_t received = 0;
+        while (received < sizeof(write_msg)) {
+            ssize_t n = read(pipefd[0], read_msg + received, sizeof(write_msg) - received);
+            if (n == -1 && errno == EINTR) {
+                continue;
+            }
+            if (n <= 0) {
+                if (n == -1) perror("read failed");
+                else fprintf(stderr, "Unexpected EOF before complete message.\n");
+                close(pipefd[0]);
+                exit(EXIT_FAILURE);
+            }
+            received += (size_t)n;
+        }
+        if (read_msg[sizeof(write_msg) - 1] != '\0') {
+            fprintf(stderr, "Message has no terminating NUL.\n");
             close(pipefd[0]);
             exit(EXIT_FAILURE);
         }
         
-        printf("Child (PID %d): Received message: '%s'\n", getpid(), read_msg);
+        printf("Child (PID %jd): Received message: '%s'\n", (intmax_t)getpid(), read_msg);
         
         close(pipefd[0]); // Close read end after reading
     }
 
+    if (fflush(stdout) == EOF) {
+        perror("fflush failed");
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }

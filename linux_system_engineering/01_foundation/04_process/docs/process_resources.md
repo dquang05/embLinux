@@ -20,16 +20,16 @@ The OS imposes limits on each type of resource. Developers use `getrlimit()` and
 
 Each resource type has 2 limits:
 1. **Soft limit:** The actual limit enforced by the kernel. The process can increase or decrease this value, provided it does not exceed the Hard limit.
-2. **Hard limit:** The "ceiling" for the soft limit. Normal users can only *decrease* the hard limit (and cannot increase it again). Only privileged users (root) have the authority to increase the hard limit.
+2. **Hard limit:** The "ceiling" for the soft limit. An unprivileged process can lower its hard limit but cannot raise it again. On Linux, raising it requires `CAP_SYS_RESOURCE` in the initial user namespace, subject to resource-specific limits.
 
 ### Common Resource Limits
-- **`RLIMIT_AS` (Virtual Memory Size):** Maximum virtual memory size. When exceeded, dynamic allocation functions like `malloc()` or `mmap()` will fail and return `ENOMEM`.
+- **`RLIMIT_AS` (Virtual Memory Size):** Limits virtual address space. When an allocation requiring additional address space exceeds the limit, `malloc()` returns `NULL` or `mmap()` returns `MAP_FAILED`, with `errno` set to `ENOMEM` on Linux. An allocation satisfied from existing memory need not increase address space.
 - **`RLIMIT_CORE` (Core file size):** Maximum size of a core dump file (a memory snapshot upon crash).
   - > [!TIP]
     > This is often set to `0` (disabling core dumps) to save disk space and protect sensitive data in RAM from exposure during crashes.
 - **`RLIMIT_CPU` (CPU Time):** Maximum CPU time the process is allowed to run. If exceeded, the process receives a `SIGXCPU` signal. If it continues to run past the hard limit, it receives `SIGKILL`.
-- **`RLIMIT_FSIZE` (File Size):** Largest file size that can be created. Exceeding this causes `write()` to fail with `EFBIG` and the process receives a `SIGXFSZ` signal.
-- **`RLIMIT_NOFILE` (Number of open files):** Maximum number of open file descriptors (plus 1). This limit must be increased on application servers handling many concurrent socket connections.
-- **`RLIMIT_NPROC` (Number of processes):** Maximum number of processes a *single user* can create.
+- **`RLIMIT_FSIZE` (File Size):** Maximum file size the process may create or extend. An attempt to exceed it generates `SIGXFSZ`; if the signal is caught or ignored, the relevant system call can fail with `EFBIG`. The default signal action terminates the process.
+- **`RLIMIT_NOFILE` (File descriptors):** One greater than the maximum file descriptor number that can be opened by the process, not the number currently open plus one. Exceeding it normally fails with `EMFILE`.
+- **`RLIMIT_NPROC` (Linux/BSD extension):** On Linux, limits the number of extant threads associated with the caller's real UID, rather than a lifetime count of process creations. It is not specified by POSIX.
   - > [!IMPORTANT]
-    > This limit is critical for defending against **Fork Bomb** attacks (malicious code that continuously forks child processes until the system hangs). Once the limit is reached, `fork()` fails with `EAGAIN`.
+    > This limit can help constrain **Fork Bombs**: when enforced and reached, `fork()` fails with `EAGAIN`. Linux does not enforce it for real UID 0 or processes with `CAP_SYS_ADMIN` or `CAP_SYS_RESOURCE`.

@@ -9,7 +9,9 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -20,16 +22,20 @@
  * @return EXIT_SUCCESS on successful execution, EXIT_FAILURE on error.
  */
 int main() {
-    printf("Parent Process: PID = %d\n", getpid());
+    printf("Parent Process: PID = %jd\n", (intmax_t)getpid());
     printf("Forking a child process...\n");
+    /* Avoid duplicating buffered output across fork when stdout is redirected. */
+    if (fflush(stdout) == EOF) {
+        perror("fflush failed");
+        return EXIT_FAILURE;
+    }
 
     /* 
      * KERNEL MECHANISM: fork()
      * fork() creates a new process by duplicating the calling process. The new process
      * is referred to as the child process. The kernel uses a Copy-On-Write (COW) 
-     * mechanism to optimize this: the parent and child initially share the same physical 
-     * memory pages with read-only access. A page is only physically copied to a new frame
-     * when either process attempts to modify it.
+     * mechanism for private writable mappings: parent and child can initially share
+     * pages, and a write may create a private copy. Shared mappings remain shared.
      */
     pid_t pid = fork();
 
@@ -39,8 +45,13 @@ int main() {
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
         // Child Process
-        printf("Child Process: PID = %d, Parent PID = %d\n", getpid(), getppid());
+        printf("Child Process: PID = %jd, Parent PID = %jd\n", (intmax_t)getpid(), (intmax_t)getppid());
         printf("Child is replacing itself with 'ls -l' using execve...\n");
+        /* execve replaces the process image without flushing stdio. */
+        if (fflush(stdout) == EOF) {
+            perror("child fflush failed");
+            _exit(EXIT_FAILURE);
+        }
 
         char *args[] = {"ls", "-l", NULL};
         char *env[] = {NULL}; // Passing an empty environment
@@ -50,15 +61,16 @@ int main() {
          * execve() completely replaces the current process's memory space (Text, Data, 
          * BSS, Heap, and Stack segments) with a new program loaded from the specified 
          * executable file. The PID remains the same, but the old program is gone.
-         * The old signal handlers and mmapped memory regions are dropped.
+         * Caught signal dispositions reset to default; ignored dispositions generally
+         * remain ignored. Existing memory mappings are removed.
          */
         if (execve("/bin/ls", args, env) == -1) {
             perror("execve failed");
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
     } else {
         // Parent Process
-        printf("Parent Process: Waiting for child (PID %d) to complete...\n", pid);
+        printf("Parent Process: Waiting for child (PID %jd) to complete...\n", (intmax_t)pid);
 
         int status;
         
@@ -69,7 +81,11 @@ int main() {
          * reap the child process and prevent it from remaining a "zombie" process 
          * in the kernel's process table, which would otherwise hold onto PID structures.
          */
-        if (waitpid(pid, &status, 0) == -1) {
+        pid_t waited;
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited == -1 && errno == EINTR);
+        if (waited == -1) {
             perror("waitpid failed");
             exit(EXIT_FAILURE);
         }
@@ -77,12 +93,20 @@ int main() {
         // Check how the child terminated using standard POSIX macros
         if (WIFEXITED(status)) {
             printf("Parent Process: Child exited normally with status %d\n", WEXITSTATUS(status));
+            if (WEXITSTATUS(status) != 0) {
+                return EXIT_FAILURE;
+            }
         } else if (WIFSIGNALED(status)) {
             printf("Parent Process: Child was terminated by signal %d\n", WTERMSIG(status));
+            return EXIT_FAILURE;
         }
 
         printf("Parent Process: Finished execution.\n");
     }
 
+    if (fflush(stdout) == EOF) {
+        perror("fflush failed");
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
