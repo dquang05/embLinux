@@ -5,21 +5,21 @@ This document covers the theoretical aspects of deadlocks in concurrent systems,
 ## 1. Deadlock Characterization
 - **Deadlock:** A situation where a set of threads (or processes) is permanently blocked because each thread is holding a resource and waiting for an event (typically the release of a resource) that can only be triggered by another thread in the same set.
 - **Livelock:** Similar to a deadlock, but instead of being blocked, the threads continuously attempt an operation that always fails, resulting in no progress.
-- **The Four Necessary Conditions:** A deadlock can arise if and only if all four of the following conditions hold simultaneously in a system:
+- **The Four Necessary Conditions:** In the standard reusable-resource model below, an actual resource deadlock requires all four conditions. Permitting these conditions can allow deadlock; it does not prove a particular allocation is deadlocked:
   1. **Mutual Exclusion:** At least one resource must be held in a non-shareable mode.
   2. **Hold and Wait:** A thread must be holding at least one resource and waiting to acquire additional resources that are currently held by other threads.
   3. **No Preemption:** Resources cannot be forcibly removed (preempted) from a thread holding them; they can only be released voluntarily by the thread after it has completed its task.
   4. **Circular Wait:** There must exist a circular chain of waiting threads (e.g., $T_0$ is waiting for $T_1$, $T_1$ for $T_2$, ..., $T_n$ for $T_0$).
 
 ## 2. Resource-Allocation Graph
-- Deadlocks can be modeled using a directed graph consisting of vertices (Threads $T_i$ and Resources $R_j$).
+- In the standard reusable-resource model (exclusive instances, blocking requests that must all be satisfied, and no resource preemption), resource deadlocks can be modeled using a directed graph consisting of vertices (Threads $T_i$ and Resources $R_j$). The cycle results below apply to current request/assignment edges, not merely possible future claims.
 - **Request Edge:** A directed edge $T_i \rightarrow R_j$ indicates that thread $T_i$ has requested resource $R_j$.
 - **Assignment Edge:** A directed edge $R_j \rightarrow T_i$ indicates that resource $R_j$ has been allocated to thread $T_i$.
 - **Graph Analysis:**
   - If the graph contains **no cycles**, then **no deadlock** exists.
   - If the graph contains a **cycle**:
     - If each resource type has exactly one instance, then a deadlock **has occurred**.
-    - If each resource type has multiple instances, a deadlock **may** exist (a cycle is necessary but not sufficient in this case).
+    - With multiple instances of resource types, a deadlock **may** exist (a cycle is necessary but not sufficient in general); available instances and outstanding requests must also be considered.
 
 ## 3. Methods for Handling Deadlocks
 Operating systems typically use one of three approaches to deal with deadlocks:
@@ -34,13 +34,13 @@ Operating systems typically use one of three approaches to deal with deadlocks:
 
 ### C. Avoidance
 - Requires the system to have some additional *a priori* information about how resources will be requested. For example, a thread must declare the maximum number of resources it will ever need.
-- The OS dynamically examines the resource-allocation state to ensure that a circular-wait condition can never exist.
-- **Safe State:** The system is in a safe state if there exists a safe sequence of execution for all threads such that each can finish its execution.
+- An avoidance algorithm examines each proposed allocation and grants it only when a safe completion sequence remains under its declared resource model; it need not eliminate every graph cycle.
+- **Safe State:** A safe sequence lets every thread finish even if it requests its declared remaining maximum resources, assuming completed threads release resources. An unsafe state lacks this guarantee but is not necessarily already deadlocked; actual future requests may still permit completion.
 - **Banker's Algorithm:** A classic deadlock avoidance algorithm used when there are multiple instances of each resource type. It only grants requests if the resulting system state is "safe."
 
 ### D. Detection and Recovery
 - If a system does not employ prevention or avoidance, it may allow deadlocks to occur, run an algorithm to detect them, and then recover.
-- **Detection:** Algorithms are run periodically to check for cycles in the resource-allocation graph.
+- **Detection:** With single-instance resource types, a cycle in the current resource-allocation graph detects deadlock. With multiple instances, detection must also account for available instances and outstanding requests; a cycle alone is insufficient.
 - **Recovery Options:**
   - **Process Termination (Abort):** Abort all deadlocked threads or abort them one by one until the deadlock cycle is broken (costly because partial computation is lost).
   - **Resource Preemption:** Successively preempt some resources from threads and give them to others until the deadlock is broken. This requires dealing with issues like rollback and starvation.

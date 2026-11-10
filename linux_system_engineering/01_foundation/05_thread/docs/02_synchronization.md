@@ -16,12 +16,12 @@ This document covers the fundamental tools and classic examples of thread and pr
 
 ## 3. Peterson's Solution
 - A classic software-based solution to the critical-section problem for two processes. It uses two shared variables: `turn` (whose turn it is to enter) and `flag` (readiness to enter).
-- Note: Peterson's solution may not work correctly on modern computer architectures due to processor instruction reordering unless specific memory barriers are used.
+- Note: The abstract Peterson algorithm assumes suitable ordering of shared accesses. Ordinary concurrent C accesses to `turn` and `flag` can form data races (undefined behavior); hardware barriers alone do not fix that. A C implementation needs appropriate atomic operations and memory ordering, not just the abstract pseudocode.
 
 ## 4. Hardware Support for Synchronization
-- **Memory Barriers:** Instructions that force any changes in memory to be propagated immediately to all other processors, preventing instruction reordering issues.
+- **Memory Barriers:** Compiler barriers constrain compiler reordering; hardware barriers constrain specified processor memory ordering. They do not instantly propagate every change to every CPU. C visibility guarantees come from the required atomic operations and synchronization relationships (for example release/acquire or mutex unlock/lock). Cache coherence concerns cache copies; it does not replace software synchronization or make C data races valid.
 - **Hardware Instructions:** Atomic (non-interruptible) instructions provided by modern hardware, such as `test_and_set()` and `compare_and_swap()` (CAS).
-- **Atomic Variables:** Variables that utilize hardware instructions like CAS to ensure that operations (like incrementing a counter) are performed atomically.
+- **Atomic Variables:** C atomic operations provide indivisible accesses under the language memory model; implementations may use hardware instructions or locks. Ordering of other accesses depends on the selected memory order and synchronization relationships.
 
 ## 5. Mutex Locks
 - The simplest and most widely used higher-level software synchronization tool (Mutex = Mutual Exclusion).
@@ -30,8 +30,8 @@ This document covers the fundamental tools and classic examples of thread and pr
 
 ## 6. Semaphores
 - A more robust synchronization tool that behaves like an integer variable `S` accessed only through two atomic operations: `wait()` (or P, decrement) and `signal()` (or V, increment).
-- **Counting Semaphore:** Its value can range over an unrestricted domain. Used to control access to a given resource consisting of a finite number of instances.
-- **Binary Semaphore:** Its value can range only between 0 and 1. It functions identically to a mutex lock.
+- **Counting Semaphore:** Conceptually tracks available resource instances with a nonnegative count; POSIX semaphore values have a finite upper bound, `SEM_VALUE_MAX`. Posting at that limit can fail with `EOVERFLOW`.
+- **Binary Semaphore:** A protocol keeps the count at 0 or 1 and can provide mutual exclusion. Unlike a mutex, a semaphore has no owner: a different thread may post it. A mutex must be unlocked by its owner under the appropriate mutex-type contract; they are not universally interchangeable.
 - **Avoiding Busy Waiting:** Instead of spinning, a `wait()` operation can suspend (block) the calling process, placing it in a waiting queue. A subsequent `signal()` operation will wake up a waiting process.
 
 ## 7. Monitors
@@ -45,7 +45,7 @@ This document covers the fundamental tools and classic examples of thread and pr
 - **Priority Inversion:** A scenario where a high-priority process is indirectly preempted by a lower-priority process holding a needed resource. Usually solved via a **priority-inheritance protocol** (the lower-priority process temporarily inherits the higher priority until it releases the resource).
 
 ## 9. Classic Synchronization Problems
-- **Bounded-Buffer Problem (Producer-Consumer):** Producers and consumers share a buffer. Requires a mutex to protect buffer accesses, and two counting semaphores (`empty` and `full`) to track available slots and items.
+- **Bounded-Buffer Problem (Producer-Consumer):** Producers and consumers share a buffer. One solution uses a mutex and two counting semaphores (`empty` and `full`). Another uses a mutex plus condition variables with full/empty predicates checked in loops, as in `04_producer_consumer.c`; two semaphores are not required.
 - **Readers-Writers Problem:** Allows multiple readers to read shared data concurrently, but writers require exclusive access. A reader-writer lock improves concurrency in read-heavy applications.
 - **Dining-Philosophers Problem:** A classic model for allocating limited resources among a group of processes in a deadlock-free and starvation-free manner. Philosophers must pick up both left and right chopsticks to eat.
 
@@ -54,9 +54,9 @@ This document covers the fundamental tools and classic examples of thread and pr
   - Uses spinlocks for short code segments on multiprocessors. 
   - Uses dispatcher objects (mutexes, semaphores, events, timers) for synchronization outside the kernel.
 - **Linux:** 
-  - The kernel is fully preemptible.
+  - Kernel preemptibility depends on configuration and execution context; critical or interrupt-disabled regions impose additional constraints.
   - Utilizes atomic integers, spinlocks, and mutex locks.
-  - On single-processor systems, instead of spinlocks, Linux disables kernel preemption to prevent context switches during critical sections.
+  - On non-RT uniprocessor configurations, spinlock operations can reduce to preemption control, with interrupt protection depending on context/API. On non-RT multiprocessors, spinlocks spin and disable preemption. PREEMPT_RT changes `spinlock_t` to sleeping RT-mutex-based semantics; `raw_spinlock_t` remains a spinning lock. Configuration and architecture matter; these kernel rules differ from user-space pthread synchronization.
 
 ## 11. POSIX Synchronization
 - Provides user-level API for UNIX, Linux, and macOS:
@@ -70,6 +70,6 @@ This document covers the fundamental tools and classic examples of thread and pr
 - **Semaphores & Condition Variables:** Available in `java.util.concurrent` for more complex synchronization needs.
 
 ## 13. Alternative Approaches
-- **Transactional Memory:** Groups memory operations into atomic transactions (similar to database transactions). If a transaction fails, it rolls back. This eliminates the need for locks and thus avoids deadlocks.
+- **Transactional Memory:** Groups memory operations into transactions that may abort and retry. It can reduce explicit locking hazards, but guarantees depend on the transaction model, fallback paths and interaction with nontransactional code; it does not universally eliminate races or deadlocks.
 - **OpenMP:** Uses `#pragma omp critical` to automatically mark critical sections for the compiler.
-- **Functional Programming:** Languages like Erlang or Scala use immutable state (variables cannot be changed after initialization), completely eliminating race conditions and deadlocks.
+- **Functional Programming:** Immutable data can reduce shared-mutable-state races. Guarantees depend on the language and program: mutable components, message protocols and resource waits can still introduce races or deadlocks.

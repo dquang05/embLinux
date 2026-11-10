@@ -6,12 +6,19 @@
  * A Consumer thread takes data items out of the buffer and processes them.
  * Condition variables are used so the Consumer blocks when the buffer is empty,
  * and the Producer blocks when the buffer is full.
+ * Finite, non-canceling teaching example: one producer and one consumer,
+ * each handling the same fixed number of items.
  */
+
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <unistd.h>
+#include <time.h>
+#include <string.h>
 #include <errno.h>
 
 #define BUFFER_SIZE 5
@@ -27,6 +34,17 @@ static int out = 0;    // Index where consumer will extract the next item
 static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond_not_full = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t cond_not_empty = PTHREAD_COND_INITIALIZER;
+
+/* Complete each simulated delay after EINTR; scheduling can extend elapsed time. */
+static void simulate_delay(long nanoseconds) {
+    struct timespec remaining = {.tv_sec = 0, .tv_nsec = nanoseconds};
+    while (nanosleep(&remaining, &remaining) == -1) {
+        if (errno != EINTR) {
+            perror("nanosleep failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
 
 /**
  * @brief Producer thread function.
@@ -59,7 +77,7 @@ void *producer(void *arg) {
         pthread_mutex_unlock(&mtx);
         
         // Simulate production time
-        usleep(100000); // 100ms
+        simulate_delay(100000000L); // 100ms
     }
     
     return NULL;
@@ -95,7 +113,7 @@ void *consumer(void *arg) {
         pthread_mutex_unlock(&mtx);
         
         // Simulate processing time
-        usleep(150000); // 150ms (slower than producer to demonstrate buffer filling up)
+        simulate_delay(150000000L); // 150ms (slower than producer to demonstrate buffer filling up)
     }
     
     return NULL;
@@ -106,20 +124,34 @@ int main(void) {
     
     printf("Starting Producer-Consumer demonstration...\n");
     
-    // Create threads
-    if (pthread_create(&prod_tid, NULL, producer, NULL) != 0) {
-        perror("Failed to create producer thread");
+    // On startup failure, terminate the process; a lone producer may block.
+    int ret = pthread_create(&prod_tid, NULL, producer, NULL);
+    if (ret != 0) {
+        fprintf(stderr, "Failed to create producer thread: %s\n", strerror(ret));
         exit(EXIT_FAILURE);
     }
     
-    if (pthread_create(&cons_tid, NULL, consumer, NULL) != 0) {
-        perror("Failed to create consumer thread");
+    ret = pthread_create(&cons_tid, NULL, consumer, NULL);
+    if (ret != 0) {
+        fprintf(stderr, "Failed to create consumer thread: %s\n", strerror(ret));
         exit(EXIT_FAILURE);
     }
     
     // Wait for threads to finish
-    pthread_join(prod_tid, NULL);
-    pthread_join(cons_tid, NULL);
+    ret = pthread_join(prod_tid, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join prod_tid failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
+    ret = pthread_join(cons_tid, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join cons_tid failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
     
     printf("Demonstration finished successfully.\n");
     

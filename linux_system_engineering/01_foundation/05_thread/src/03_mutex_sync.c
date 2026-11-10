@@ -4,8 +4,8 @@
  *
  * This example is identical to 02_data_race.c, but introduces a Mutex
  * to protect the critical section (the increment of the shared counter).
- * Because the Mutex ensures Mutual Exclusion, the final sum will always
- * be exactly correct, regardless of timing and context switches.
+ * With successful mutex operations and completed workers, mutual exclusion
+ * ensures the expected sum regardless of timing and context switches.
  */
 
 #include <stdio.h>
@@ -37,7 +37,8 @@ void *increment_counter_safe(void *arg) {
         if (ret != 0) {
             errno = ret;
             perror("pthread_mutex_lock failed");
-            pthread_exit(NULL);
+            // Unexpected with this valid default mutex: terminate the process.
+            exit(EXIT_FAILURE);
         }
         
         // --- CRITICAL SECTION START ---
@@ -50,7 +51,8 @@ void *increment_counter_safe(void *arg) {
         if (ret != 0) {
             errno = ret;
             perror("pthread_mutex_unlock failed");
-            pthread_exit(NULL);
+            // Unexpected with this valid default mutex: terminate the process.
+            exit(EXIT_FAILURE);
         }
     }
     
@@ -84,12 +86,25 @@ int main(void) {
     }
     
     // Wait for both threads to finish
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
+    ret = pthread_join(t1, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join t1 failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
+    ret = pthread_join(t2, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join t2 failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
     
     printf("Actual final counter value:   %d\n", shared_counter);
     
-    if (shared_counter == (NUM_LOOPS * 2)) {
+    int failed = shared_counter != (NUM_LOOPS * 2);
+    if (!failed) {
         printf("RESULT: Success! The Mutex prevented the data race.\n");
     } else {
         printf("RESULT: Error! Something went wrong.\n");
@@ -98,5 +113,5 @@ int main(void) {
     // Destroy the mutex since we're done with it
     pthread_mutex_destroy(&counter_mutex);
     
-    return EXIT_SUCCESS;
+    return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

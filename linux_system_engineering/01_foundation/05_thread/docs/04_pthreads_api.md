@@ -7,7 +7,7 @@ This document covers the POSIX Threads (Pthreads) API, synchronization mechanism
 - **Basic Thread Operations:**
   - **Creation:** `pthread_create()` spawns a new thread which starts executing the provided start function.
   - **Termination:** A thread terminates when it returns from its start function, calls `pthread_exit()`, or is canceled via `pthread_cancel()`. Note: If any thread calls `exit()`, the entire process terminates.
-  - **Thread ID:** `pthread_self()` returns the calling thread's ID. Use `pthread_equal()` to compare two thread IDs.
+  - **Thread ID:** `pthread_self()` returns the calling thread's ID. The representation of `pthread_t` is implementation-dependent; it has no portable integer print format. Use `pthread_equal()` to compare IDs; the creation example prints an application-level index.
   - **Joining:** `pthread_join()` blocks until the specified thread terminates, retrieving its return value. Unless detached, threads must be joined to avoid zombie threads.
   - **Detaching:** `pthread_detach()` marks a thread as detached. When it terminates, the system automatically reclaims its resources without requiring a join. A detached thread cannot be joined.
 
@@ -26,7 +26,7 @@ This document covers the POSIX Threads (Pthreads) API, synchronization mechanism
 
 ## 3. Thread Safety and Per-Thread Storage (Chapter 31)
 - **Thread Safety:** A function is thread-safe if it can be safely called from multiple threads concurrently. Non-thread-safe functions typically rely on shared global or static variables.
-- **Reentrant Functions:** Achieve thread safety without mutexes by avoiding global/static variables entirely. Instead, the caller provides buffers. POSIX provides reentrant versions of many standard functions, suffixed with `_r` (e.g., `strtok_r()`).
+- **Reentrant Functions:** Can be re-entered while an earlier invocation is in progress without corrupting state. Caller-provided buffers (for example `strtok_r()` state) help, but do not prove thread safety if callers share mutable buffers or other state. Thread safety concerns concurrent calls; it can also be achieved with locking. Async-signal-safety is a separate API contract: a thread-safe function using locks is not necessarily safe in a signal handler. Ownership and all shared mutable state must be considered.
 - **One-Time Initialization:** `pthread_once()` ensures that an initialization function (like dynamic mutex initialization inside a library) is executed exactly once, no matter how many threads attempt to call it.
 
 ## 4. Thread Cancellation (Chapter 32)
@@ -35,22 +35,22 @@ This document covers the POSIX Threads (Pthreads) API, synchronization mechanism
   - `PTHREAD_CANCEL_DISABLE`: Cancellation requests are ignored and remain pending.
   - `PTHREAD_CANCEL_ENABLE`: Cancellation is allowed (default).
 - **Cancelability Type (when enabled):**
-  - `PTHREAD_CANCEL_DEFERRED`: The thread is canceled only when it reaches a **Cancellation Point** (e.g., blocking functions like `sleep()`, `read()`, `pthread_join()`). This is the default and safe type.
+  - `PTHREAD_CANCEL_DEFERRED`: The thread is canceled only when it reaches a **Cancellation Point** (e.g., blocking functions like `sleep()`, `read()`, `pthread_join()`). This is the default, but resources and mutex ownership still require cleanup and consistent invariants.
   - `PTHREAD_CANCEL_ASYNCHRONOUS`: The thread can be canceled at any time. Rarely used as it is inherently unsafe for resource management.
 - **Explicit Check:** `pthread_testcancel()` creates an artificial cancellation point for compute-bound threads that lack natural ones.
-- **Cleanup Handlers:** `pthread_cleanup_push()` and `pthread_cleanup_pop()` register functions that automatically execute when a thread is canceled or calls `pthread_exit()`. They are critical for releasing resources like locked mutexes before the thread dies.
+- **Cleanup Handlers:** `pthread_cleanup_push()` registers a handler; `pthread_cleanup_pop()` removes it and optionally executes it. Registered handlers run on cancellation or `pthread_exit()`. Condition waits reacquire their mutex before cancellation cleanup, so a suitable handler may need to unlock it. The finite producer-consumer example never requests cancellation and supplies no cancellation protocol.
 
 ## 5. Further Details (Chapter 33)
-- **Thread Stacks:** The default stack size (usually 2MB on x86-32) can be altered using `pthread_attr_setstacksize()`.
+- **Thread Stacks:** On Linux/NPTL, a finite `RLIMIT_STACK` at program startup determines the default new-thread stack size; an unlimited setting uses an architecture-dependent default. Libc and target configuration matter. Use `pthread_attr_setstacksize()` to request a supported size.
 - **Threads and Signals:** A highly complex interaction.
   - Signal actions and dispositions are process-wide.
   - Signal masks are per-thread (manipulated via `pthread_sigmask()`).
   - Thread-directed signals can be sent using `pthread_kill()` or `pthread_sigqueue()`.
-  - **Best Practice:** Block all asynchronous signals in all threads and dedicate a single thread to wait for signals synchronously using `sigwait()`.
+  - A process-directed signal goes to one eligible thread; thread-directed signals target a particular thread. `SIGKILL` and `SIGSTOP` cannot be blocked. An optional design blocks a selected blockable set before worker creation and dedicates a `sigwait()` thread to that set.
 - **Process Control:**
   - `exec()`: Immediately destroys all other threads except the calling thread.
-  - `fork()`: Duplicates only the calling thread into the child process. This is extremely dangerous in multithreaded applications as mutexes held by vanished threads will remain locked permanently. `fork()` should typically be followed immediately by `exec()`. `pthread_atfork()` can be used to manage state around a fork.
+  - `fork()`: Only the calling thread exists in the Linux/POSIX child. Copied synchronization state may retain locks associated with vanished threads. Until `exec`, the child is restricted to applicable async-signal-safe operations. `pthread_atfork()` can help selected state but cannot universally repair inherited library/synchronization state.
   - `exit()`: Terminates the entire process immediately.
 - **Linux Threading Implementations:**
   - **LinuxThreads (Obsolete):** Built over `clone()`, used a manager thread, and relied heavily on signals. It violated many SUSv3 standards (e.g., threads had different PIDs).
-  - **NPTL (Native POSIX Threads Library):** The modern 1:1 implementation introduced in Linux 2.6. Highly compliant with SUSv3, leverages the `CLONE_THREAD` flag so all threads share the same PID, and scales exceptionally well (can manage up to 100,000 threads). No manager thread is needed.
+  - **NPTL (Native POSIX Threads Library):** The modern 1:1 implementation introduced in Linux 2.6. Highly compliant with SUSv3, leverages the `CLONE_THREAD` flag so all threads share the same PID, with capacity depending on user/task/PID limits, available virtual memory, stack sizes and target configuration. There is no universal 100,000-thread guarantee. No manager thread is needed.

@@ -25,7 +25,7 @@ typedef struct {
  * @brief The function executed by the new thread.
  * 
  * @param arg Pointer to the thread arguments (expected to be thread_args_t*).
- * @return void* A pointer to an integer containing the thread's exit status.
+ * @return void* Heap integer on success; NULL means allocation failure here.
  */
 void *thread_function(void *arg) {
     thread_args_t *args = (thread_args_t *)arg;
@@ -68,7 +68,8 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
     
-    printf("[Main] Thread created successfully (ID: %lu). Waiting for it to finish...\n", (unsigned long)my_thread);
+    // pthread_t has an implementation-dependent representation; use our own index.
+    printf("[Main] Thread %d created successfully. Waiting for it to finish...\n", args.thread_id);
     
     // 2. Join the thread to retrieve its return value
     void *thread_result = NULL;
@@ -85,7 +86,9 @@ int main(void) {
         printf("[Main] Thread joined successfully. Thread returned: %d\n", *val);
         free(val); // Free the memory allocated by the thread
     } else {
-        printf("[Main] Thread joined but returned NULL.\n");
+        // This example defines NULL as worker allocation failure.
+        fprintf(stderr, "[Main] Thread allocation failed.\n");
+        return EXIT_FAILURE;
     }
     
     printf("[Main] Exiting.\n");

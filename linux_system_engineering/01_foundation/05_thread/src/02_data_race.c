@@ -3,9 +3,9 @@
  * @brief Demonstrates a data race when multiple threads access shared data without synchronization.
  *
  * This example spawns two threads that both repeatedly increment a global variable.
- * Due to the lack of synchronization (e.g., a mutex), the final value of the
- * global variable will likely be less than the expected total sum because of
- * race conditions during the read-modify-write CPU instructions.
+ * The unsynchronized non-atomic updates deliberately form a C data race,
+ * causing undefined behavior. Lost increments are only one possible observation;
+ * even a correct final counter does not establish race freedom.
  */
 
 #include <stdio.h>
@@ -30,7 +30,7 @@ void *increment_counter(void *arg) {
     for (int i = 0; i < NUM_LOOPS; ++i) {
         // DATA RACE HERE!
         // The increment operation (shared_counter++) is not atomic.
-        // It consists of three steps:
+        // One possible machine-level illustration (not a C guarantee):
         // 1. Read shared_counter from memory to a CPU register
         // 2. Increment the register
         // 3. Write the register back to memory
@@ -65,15 +65,27 @@ int main(void) {
     }
     
     // Wait for both threads to finish
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
+    ret = pthread_join(t1, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join t1 failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
+    ret = pthread_join(t2, NULL);
+    if (ret != 0) {
+        errno = ret;
+        perror("pthread_join t2 failed");
+        // Completion is unknown; exit the process without destroying shared objects.
+        exit(EXIT_FAILURE);
+    }
     
     printf("Actual final counter value:   %d\n", shared_counter);
     
     if (shared_counter != (NUM_LOOPS * 2)) {
-        printf("RESULT: A Data Race occurred! Increments were lost.\n");
+        printf("RESULT: Counter mismatch observed; this program has undefined behavior.\n");
     } else {
-        printf("RESULT: By pure luck, no data race was visible this time.\n");
+        printf("RESULT: Counter matched; the deliberate data race still exists.\n");
     }
     
     return EXIT_SUCCESS;

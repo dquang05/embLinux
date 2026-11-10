@@ -18,7 +18,7 @@ endif
 dir:
 	@mkdir -p $(OBJ_DIR)
 
-$(OBJ_DIR)/%: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%: $(SRC_DIR)/%.c | dir
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
 
 clean:

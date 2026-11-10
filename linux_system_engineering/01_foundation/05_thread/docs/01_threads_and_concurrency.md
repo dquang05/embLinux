@@ -40,11 +40,11 @@ As systems scale to thousands of threads, developers increasingly transfer the c
 - **Intel Threading Building Blocks (TBB):** A C++ template library for parallel programming.
 
 ## 6. Threading Issues
-- **`fork()` and `exec()`:** Semantics vary. On some UNIX systems, `fork()` duplicates all threads, while on others it duplicates only the calling thread. If `exec()` is called immediately after `fork()`, duplicating all threads is unnecessary.
-- **Signal Handling:** Signals are used in UNIX to notify a process of an event. Synchronous signals are delivered to the thread causing the signal. Asynchronous signals are more complex and can be delivered to every thread, a specific thread, or a dedicated signal-handling thread.
+- **`fork()` and `exec()`:** On current Linux/POSIX, only the calling thread survives in the child after `fork()`. Copied mutex/condition state can refer to vanished threads; until `exec`, the child may call only applicable async-signal-safe operations. `pthread_atfork()` handlers are not a universal repair for inherited library or synchronization state.
+- **Signal Handling:** A synchronous fault signal is directed to the thread causing it. A process-directed signal is delivered to one eligible thread, not broadcast; a thread-directed signal targets a particular thread. Masks are per-thread; `SIGKILL` and `SIGSTOP` cannot be blocked. An optional pattern blocks a selected blockable signal set before creating workers and uses a dedicated `sigwait()` thread for that set.
 - **Thread Cancellation:** Terminating a thread before it has finished.
   - **Asynchronous cancellation:** Terminates the target thread immediately (can lead to resource leaks).
-  - **Deferred cancellation:** The target thread periodically checks a flag at safe points (cancellation points) to determine if it should terminate itself.
+  - **Deferred cancellation:** An enabled request takes effect at cancellation points. This is not inherently safe: cleanup handlers and resource invariants must account for owned mutexes and allocations. A condition wait reacquires its mutex before cancellation cleanup handlers run; cleanup may need to unlock it.
 - **Thread-Local Storage (TLS):** Allows each thread to have its own copy of data. Unlike local variables, TLS data is visible across function invocations.
 - **Scheduler Activations:** A communication mechanism between the user-thread library and the kernel using Lightweight Processes (LWP). The kernel informs the library of events via **upcalls**, allowing the library to adjust thread scheduling.
 
